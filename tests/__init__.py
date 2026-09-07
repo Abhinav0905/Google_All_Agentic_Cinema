@@ -1,0 +1,1 @@
+"""CueCheck test suite."""

@@ -1,0 +1,1 @@
+"""CueCheck API: FastAPI application."""
