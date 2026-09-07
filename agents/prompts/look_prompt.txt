@@ -1,0 +1,16 @@
+Perform a visual accessibility analysis of this video.
+Given the speech segments from dialogue transcription:
+1. For each speech segment, determine whether the speaker is visible on screen with moving lips ("speaker_on_screen": true) or if the speaker is off-screen / turned away / out of frame ("speaker_on_screen": false).
+2. Detect key visual events that may require Audio Description (AD):
+   - Actions carrying key plot developments ("action")
+   - Scene transitions and setting changes ("scene_change")
+   - Important on-screen text, titles, lower thirds, or signs not read aloud in dialogue ("onscreen_text")
+   - Subtle facial expressions or emotional gestures crucial to story understanding ("expression")
+
+Return a JSON object with:
+- "speaker_visibilities": list of objects with "segment_index" (0-indexed) and "speaker_on_screen" (boolean)
+- "visual_events": list of objects each containing:
+  - "t_ms": timestamp in milliseconds
+  - "label": concise descriptive text suitable for audio description
+  - "essential": boolean (true if vital for blind/low-vision viewers to understand narrative)
+  - "kind": one of "action", "scene_change", "onscreen_text", "expression"

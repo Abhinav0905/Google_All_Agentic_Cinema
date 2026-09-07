@@ -1,0 +1,12 @@
+Analyze all non-speech audio events in this video.
+Return a JSON object containing an "events" array.
+Each event must have:
+- "t_ms": timestamp in milliseconds when the sound event occurs or starts
+- "label": concise descriptive label in standard SDH bracket format (e.g. "[DOOR SLAMS]", "[PHONE RINGS]", "[UPBEAT MUSIC PLAYS]", "[GUNSHOT]", "[LAUGHTER]")
+- "salience": either "plot" (essential sound effect that affects narrative understanding) or "ambient" (background atmosphere/room tone)
+- "source": "gemini"
+
+Rules:
+- Include music start and music stop transitions.
+- Flag prominent Foley and sound effects (door slam, phone ring, footsteps approaching, car horn, siren, scream, applause).
+- Do not include standard speech or dialogue here.
