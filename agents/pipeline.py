@@ -44,6 +44,16 @@ from engine.profiles import load_profile
 from engine.rules import run_caption_rules, run_semantic_rules
 from engine.scoring import compute_scorecard
 
+
+def load_cues_from_uri(uri: str, kind: str = "caption"):
+    """Parse cues from a local path or a gs:// text object."""
+    if uri.startswith("gs://"):
+        from engine.gcs import download_blob_to_string
+
+        content = download_blob_to_string(uri)
+        return parse_timed_text(content, kind=kind)
+    return parse_timed_text(uri, kind=kind)
+
 TraceCallback = Callable[[TraceStep, Run], None]
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -229,10 +239,10 @@ class IngestAgent(QcStepAgent):
             pctx.profile = load_profile(pctx.run.profile_id)
 
             if pctx.run.caption_uri:
-                pctx.cues = parse_timed_text(pctx.run.caption_uri, kind="caption")
+                pctx.cues = load_cues_from_uri(pctx.run.caption_uri, kind="caption")
 
             if pctx.run.has_ad and pctx.run.ad_uri:
-                pctx.ad_cues = parse_timed_text(pctx.run.ad_uri, kind="ad")
+                pctx.ad_cues = load_cues_from_uri(pctx.run.ad_uri, kind="ad")
 
             dur = time.time() - start
             summary = (
@@ -458,12 +468,12 @@ def create_qc_sequential_agent() -> SequentialAgent:
     )
 
 
-async def execute_pipeline(
+async def execute_pipeline_with_context(
     run: Run,
     live: bool = False,
     trace_callback: Optional[TraceCallback] = None,
-) -> Run:
-    """Execute the complete 8-step ADK pipeline on a Run instance."""
+) -> PipelineContext:
+    """Execute the 8-step pipeline and return the in-memory context."""
     pctx = PipelineContext(run, live=live, trace_callback=trace_callback)
     pipeline_agent = create_qc_sequential_agent()
 
@@ -496,4 +506,16 @@ async def execute_pipeline(
             trace_callback(fail_step, run)
         raise
 
-    return run
+    return pctx
+
+
+async def execute_pipeline(
+    run: Run,
+    live: bool = False,
+    trace_callback: Optional[TraceCallback] = None,
+) -> Run:
+    """Execute the complete 8-step ADK pipeline on a Run instance."""
+    pctx = await execute_pipeline_with_context(
+        run, live=live, trace_callback=trace_callback
+    )
+    return pctx.run
