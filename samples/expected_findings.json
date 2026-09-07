@@ -1,0 +1,46 @@
+[
+  {
+    "id": "CPS_2_6000",
+    "code": "CPS",
+    "severity": "error",
+    "cue_index": 2,
+    "start_ms": 6000,
+    "end_ms": 7500,
+    "message": "Reading speed of 48.7 cps exceeds maximum limit of 20 cps",
+    "evidence": "text_length=73 chars, duration=1.50s, cps=48.7",
+    "spec_ref": "Standard streaming timed-text guideline (e.g. Netflix / BBC subtitle guide) for adult reading speeds"
+  },
+  {
+    "id": "CPS_4_13000",
+    "code": "CPS",
+    "severity": "error",
+    "cue_index": 4,
+    "start_ms": 13000,
+    "end_ms": 14200,
+    "message": "Reading speed of 36.7 cps exceeds maximum limit of 20 cps",
+    "evidence": "text_length=44 chars, duration=1.20s, cps=36.7",
+    "spec_ref": "Standard streaming timed-text guideline (e.g. Netflix / BBC subtitle guide) for adult reading speeds"
+  },
+  {
+    "id": "LINES_5_15000",
+    "code": "LINES",
+    "severity": "error",
+    "cue_index": 5,
+    "start_ms": 15000,
+    "end_ms": 19500,
+    "message": "Cue has 3 lines, exceeding maximum limit of 2 lines",
+    "evidence": "line_count=3, max=2",
+    "spec_ref": "EBU / FCC standard 2-line maximum for readability"
+  },
+  {
+    "id": "CPS_7_25000",
+    "code": "CPS",
+    "severity": "error",
+    "cue_index": 7,
+    "start_ms": 25000,
+    "end_ms": 26500,
+    "message": "Reading speed of 40.7 cps exceeds maximum limit of 20 cps",
+    "evidence": "text_length=61 chars, duration=1.50s, cps=40.7",
+    "spec_ref": "Standard streaming timed-text guideline (e.g. Netflix / BBC subtitle guide) for adult reading speeds"
+  }
+]
