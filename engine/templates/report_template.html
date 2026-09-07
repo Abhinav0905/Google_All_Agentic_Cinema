@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CueCheck QC Audit Report — {{ run_id }}</title>
+  <style>
+    :root {
+      --bg-dark: #0f1117;
+      --card-bg: #1a1d27;
+      --card-border: #2a2e3d;
+      --text-main: #f0f2f8;
+      --text-muted: #949eb5;
+      --pass: #10b981;
+      --warn: #f59e0b;
+      --fail: #ef4444;
+      --info: #3b82f6;
+      --mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--sans);
+      line-height: 1.5;
+      padding: 32px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 24px;
+      margin-bottom: 32px;
+    }
+    h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+    .brand { color: #6366f1; }
+    .meta { font-family: var(--mono); font-size: 13px; color: var(--text-muted); margin-top: 6px; }
+    .overall-badge {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 700;
+      padding: 8px 16px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .badge-pass { background: rgba(16, 185, 129, 0.15); color: var(--pass); border: 1px solid var(--pass); }
+    .badge-warn { background: rgba(245, 158, 11, 0.15); color: var(--warn); border: 1px solid var(--warn); }
+    .badge-fail { background: rgba(239, 68, 68, 0.15); color: var(--fail); border: 1px solid var(--fail); }
+    .badge-info { background: rgba(59, 130, 246, 0.15); color: var(--info); border: 1px solid var(--info); }
+
+    section { margin-bottom: 40px; }
+    h2 { font-size: 20px; font-weight: 600; margin-bottom: 16px; border-left: 4px solid #6366f1; padding-left: 12px; }
+
+    /* Scorecard Grid */
+    .scorecard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+    }
+    .score-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .score-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
+    .score-val { font-size: 28px; font-family: var(--mono); font-weight: 700; margin: 6px 0; }
+    .score-threshold { font-size: 12px; font-family: var(--mono); color: var(--text-muted); }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 8px; overflow: hidden; border: 1px solid var(--card-border); }
+    th, td { padding: 12px 16px; text-align: left; font-size: 13px; }
+    th { background: #141722; color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; border-bottom: 1px solid var(--card-border); }
+    tr:not(:last-child) td { border-bottom: 1px solid var(--card-border); }
+    .col-time { font-family: var(--mono); width: 120px; }
+    .col-code { font-family: var(--mono); font-weight: 600; width: 180px; }
+    .col-sev { width: 80px; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-family: var(--mono); font-weight: 600; }
+    .pill-error { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .pill-warning { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .pill-info { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+    .evidence { color: var(--text-muted); font-size: 12px; margin-top: 4px; }
+    .spec-ref { font-size: 11px; color: #818cf8; margin-top: 2px; }
+
+    /* Comparison Table */
+    .compare-table td, .compare-table th { text-align: center; }
+    .compare-table td:first-child, .compare-table th:first-child { text-align: left; }
+    .diff-better { color: var(--pass); font-weight: 700; }
+
+    /* Fix Diff */
+    .fix-item { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+    .fix-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-family: var(--mono); font-size: 13px; }
+    .diff-box { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-family: var(--mono); font-size: 12px; }
+    .diff-before { background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 4px; padding: 8px; }
+    .diff-after { background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 4px; padding: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1><span class="brand">CueCheck</span> Quality Control Report</h1>
+        <div class="meta">
+          RUN ID: {{ run_id }} &bull; DATE: {{ created_at }} &bull; PROFILE: {{ profile.name }}
+        </div>
+      </div>
+      <div>
+        <span class="overall-badge badge-{{ scorecard.overall_status }}">
+          STATUS: {{ scorecard.overall_status }}
+        </span>
+      </div>
+    </header>
+
+    {% if after_scorecard %}
+    <section>
+      <h2>Before / After Optimization Comparison</h2>
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Accessibility Dimension</th>
+            <th>Original Score</th>
+            <th>After Accepted Fixes</th>
+            <th>Threshold</th>
+            <th>Resolution Impact</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Accuracy</td>
+            <td>{{ "%.1f"|format(scorecard.accuracy.score * 100) }}%</td>
+            <td class="diff-better">{{ "%.1f"|format(after_scorecard.accuracy.score * 100) }}%</td>
+            <td>{{ "%.0f"|format(scorecard.accuracy.threshold * 100) }}%</td>
+            <td>{{ "+" if after_scorecard.accuracy.score >= scorecard.accuracy.score else "" }}{{ "%.1f"|format((after_scorecard.accuracy.score - scorecard.accuracy.score) * 100) }}%</td>
+          </tr>
+          <tr>
+            <td>Synchronicity</td>
+            <td>{{ "%.1f"|format(scorecard.synchronicity.score * 100) }}%</td>
+            <td class="diff-better">{{ "%.1f"|format(after_scorecard.synchronicity.score * 100) }}%</td>
+            <td>{{ "%.0f"|format(scorecard.synchronicity.threshold * 100) }}%</td>
+            <td>{{ "+" if after_scorecard.synchronicity.score >= scorecard.synchronicity.score else "" }}{{ "%.1f"|format((after_scorecard.synchronicity.score - scorecard.synchronicity.score) * 100) }}%</td>
+          </tr>
+          <tr>
+            <td>Completeness</td>
+            <td>{{ "%.1f"|format(scorecard.completeness.score * 100) }}%</td>
+            <td class="diff-better">{{ "%.1f"|format(after_scorecard.completeness.score * 100) }}%</td>
+            <td>{{ "%.0f"|format(scorecard.completeness.threshold * 100) }}%</td>
+            <td>{{ "+" if after_scorecard.completeness.score >= scorecard.completeness.score else "" }}{{ "%.1f"|format((after_scorecard.completeness.score - scorecard.completeness.score) * 100) }}%</td>
+          </tr>
+          <tr>
+            <td>Readability</td>
+            <td>{{ "%.1f"|format(scorecard.readability.score * 100) }}%</td>
+            <td class="diff-better">{{ "%.1f"|format(after_scorecard.readability.score * 100) }}%</td>
+            <td>{{ "%.0f"|format(scorecard.readability.threshold * 100) }}%</td>
+            <td>{{ "+" if after_scorecard.readability.score >= scorecard.readability.score else "" }}{{ "%.1f"|format((after_scorecard.readability.score - scorecard.readability.score) * 100) }}%</td>
+          </tr>
+          {% if scorecard.sdh_coverage and after_scorecard.sdh_coverage %}
+          <tr>
+            <td>SDH Coverage</td>
+            <td>{{ "%.1f"|format(scorecard.sdh_coverage.score * 100) }}%</td>
+            <td class="diff-better">{{ "%.1f"|format(after_scorecard.sdh_coverage.score * 100) }}%</td>
+            <td>{{ "%.0f"|format(scorecard.sdh_coverage.threshold * 100) }}%</td>
+            <td>{{ "+" if after_scorecard.sdh_coverage.score >= scorecard.sdh_coverage.score else "" }}{{ "%.1f"|format((after_scorecard.sdh_coverage.score - scorecard.sdh_coverage.score) * 100) }}%</td>
+          </tr>
+          {% endif %}
+          {% if scorecard.ad_coverage and after_scorecard.ad_coverage %}
+          <tr>
+            <td>AD Coverage</td>
+            <td>{{ "%.1f"|format(scorecard.ad_coverage.score * 100) }}%</td>
+            <td class="diff-better">{{ "%.1f"|format(after_scorecard.ad_coverage.score * 100) }}%</td>
+            <td>{{ "%.0f"|format(scorecard.ad_coverage.threshold * 100) }}%</td>
+            <td>{{ "+" if after_scorecard.ad_coverage.score >= scorecard.ad_coverage.score else "" }}{{ "%.1f"|format((after_scorecard.ad_coverage.score - scorecard.ad_coverage.score) * 100) }}%</td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+
+    <section>
+      <h2>Quality Scorecard</h2>
+      <div class="scorecard-grid">
+        <div class="score-card">
+          <div class="score-title">Accuracy</div>
+          <div class="score-val" style="color: var(--{{ scorecard.accuracy.status }});">
+            {{ "%.1f"|format(scorecard.accuracy.score * 100) }}%
+          </div>
+          <div class="score-threshold">Spec: &ge;{{ "%.0f"|format(scorecard.accuracy.threshold * 100) }}%</div>
+        </div>
+        <div class="score-card">
+          <div class="score-title">Synchronicity</div>
+          <div class="score-val" style="color: var(--{{ scorecard.synchronicity.status }});">
+            {{ "%.1f"|format(scorecard.synchronicity.score * 100) }}%
+          </div>
+          <div class="score-threshold">Spec: &ge;{{ "%.0f"|format(scorecard.synchronicity.threshold * 100) }}%</div>
+        </div>
+        <div class="score-card">
+          <div class="score-title">Completeness</div>
+          <div class="score-val" style="color: var(--{{ scorecard.completeness.status }});">
+            {{ "%.1f"|format(scorecard.completeness.score * 100) }}%
+          </div>
+          <div class="score-threshold">Spec: &ge;{{ "%.0f"|format(scorecard.completeness.threshold * 100) }}%</div>
+        </div>
+        <div class="score-card">
+          <div class="score-title">Readability</div>
+          <div class="score-val" style="color: var(--{{ scorecard.readability.status }});">
+            {{ "%.1f"|format(scorecard.readability.score * 100) }}%
+          </div>
+          <div class="score-threshold">Spec: &ge;{{ "%.0f"|format(scorecard.readability.threshold * 100) }}%</div>
+        </div>
+        {% if scorecard.sdh_coverage %}
+        <div class="score-card">
+          <div class="score-title">SDH Coverage</div>
+          <div class="score-val" style="color: var(--{{ scorecard.sdh_coverage.status }});">
+            {{ "%.1f"|format(scorecard.sdh_coverage.score * 100) }}%
+          </div>
+          <div class="score-threshold">Spec: &ge;{{ "%.0f"|format(scorecard.sdh_coverage.threshold * 100) }}%</div>
+        </div>
+        {% endif %}
+        {% if scorecard.ad_coverage %}
+        <div class="score-card">
+          <div class="score-title">AD Coverage</div>
+          <div class="score-val" style="color: var(--{{ scorecard.ad_coverage.status }});">
+            {{ "%.1f"|format(scorecard.ad_coverage.score * 100) }}%
+          </div>
+          <div class="score-threshold">Spec: &ge;{{ "%.0f"|format(scorecard.ad_coverage.threshold * 100) }}%</div>
+        </div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section>
+      <h2>Findings Log ({{ findings|length }} issues identified)</h2>
+      <table>
+        <thead>
+          <tr>
+            <th class="col-time">Timecode</th>
+            <th class="col-sev">Severity</th>
+            <th class="col-code">Violation Code</th>
+            <th>Description, Evidence & Specification Reference</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in findings %}
+          <tr>
+            <td class="col-time">{{ format_tc(f.start_ms) }}</td>
+            <td class="col-sev"><span class="pill pill-{{ f.severity }}">{{ f.severity }}</span></td>
+            <td class="col-code">{{ f.code }}</td>
+            <td>
+              <div>{{ f.message }}</div>
+              {% if f.evidence %}<div class="evidence">Evidence: {{ f.evidence }}</div>{% endif %}
+              {% if f.spec_ref %}<div class="spec-ref">&sect; {{ f.spec_ref }}</div>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    {% if fixes %}
+    <section>
+      <h2>Proposed Fixes ({{ fixes|length }} automated proposals)</h2>
+      {% for fix in fixes %}
+      <div class="fix-item">
+        <div class="fix-header">
+          <span><strong>FIX #{{ loop.index }} &bull; {{ fix.type|upper }}</strong> (Status: {{ fix.status|upper }})</span>
+          <span>Target: {{ fix.finding_ids|join(", ") }}</span>
+        </div>
+        <div class="diff-box">
+          <div class="diff-before">
+            <strong>BEFORE:</strong><br>
+            {% if fix.before %}
+              [{{ format_tc(fix.before.start_ms) }} &rarr; {{ format_tc(fix.before.end_ms) }}]<br>
+              {{ fix.before.text }}
+            {% else %}
+              <em>[None - Item to be inserted]</em>
+            {% endif %}
+          </div>
+          <div class="diff-after">
+            <strong>AFTER:</strong><br>
+            {% if fix.after %}
+              [{{ format_tc(fix.after.start_ms) }} &rarr; {{ format_tc(fix.after.end_ms) }}]<br>
+              {{ fix.after.text }}
+            {% else %}
+              <em>[Deleted]</em>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+  </div>
+</body>
+</html>

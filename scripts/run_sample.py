@@ -1,60 +1,32 @@
 #!/usr/bin/env python3
 """CLI runner for CueCheck QC pipeline on sample media deliverables.
 
+Executes the 8-step ADK pipeline, simulates fix application, produces
+before/after scorecard metrics, and exports an HTML audit report.
+
 Usage:
   python scripts/run_sample.py [--live] [--profile adult] [--no-sdh] [--no-ad]
 """
 
 import argparse
-import os
-import sys
+import asyncio
 from pathlib import Path
-from typing import List
 
+from agents.pipeline import execute_pipeline
 from engine.alignment import align_cues_to_segments
-from engine.models import Finding
-from engine.parsers import ms_to_srt_timecode, parse_timed_text
+from engine.fixer import apply_accepted_fixes
+from engine.models import Finding, Fix, Run, Scorecard, TraceStep
+from engine.parsers import ms_to_srt_timecode
 from engine.profiles import load_profile
+from engine.report import save_html_report
 from engine.rules import run_caption_rules, run_semantic_rules
+from engine.scoring import compute_scorecard
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-FIXTURES_DIR = ROOT_DIR / "tests" / "fixtures"
 SAMPLES_DIR = ROOT_DIR / "samples"
 
 
-def load_ground_truth(live: bool, media_uri: str):
-    """Load segments, audio events, and visual events either from Vertex AI or offline fixtures."""
-    from agents.multimodal import run_listen, run_look, run_transcribe
-
-    project = os.environ.get("GOOGLE_CLOUD_PROJECT")
-    can_run_live = live and project and project != "your-gcp-project-id"
-
-    if can_run_live:
-        print("[mode] Running LIVE against Vertex AI Gemini models...")
-        segments = run_transcribe(media_uri)
-        audio_events = run_listen(media_uri)
-        segments, visual_events = run_look(media_uri, segments)
-    else:
-        if live:
-            print(
-                "[warning] Live mode requested but GCP project not configured. "
-                "Falling back to fixtures."
-            )
-        else:
-            print("[mode] Running with recorded ground-truth fixtures...")
-
-        transcribe_fix = FIXTURES_DIR / "transcribe_fixture.json"
-        listen_fix = FIXTURES_DIR / "listen_fixture.json"
-        look_fix = FIXTURES_DIR / "look_fixture.json"
-
-        segments = run_transcribe(media_uri, offline_fixture=transcribe_fix)
-        audio_events = run_listen(media_uri, offline_fixture=listen_fix)
-        segments, visual_events = run_look(media_uri, segments, offline_fixture=look_fix)
-
-    return segments, audio_events, visual_events
-
-
-def print_findings_table(findings: List[Finding]) -> None:
+def print_findings_table(findings: list[Finding]) -> None:
     """Format and print findings report in terminal."""
     sorted_findings = sorted(findings, key=lambda f: f.start_ms)
 
@@ -78,17 +50,103 @@ def print_findings_table(findings: List[Finding]) -> None:
 
     print("=" * 100)
 
-    errors = sum(1 for f in findings if f.severity == "error")
-    warnings = sum(1 for f in findings if f.severity == "warning")
-    infos = sum(1 for f in findings if f.severity == "info")
 
+def print_scorecard_comparison(before: Scorecard, after: Scorecard) -> None:
+    """Print terminal comparison table of before and after scores."""
+    print("\n" + "=" * 70)
+    print("ACCESSIBILITY SCORECARD: BEFORE vs AFTER ACCEPTED FIXES")
+    print("-" * 70)
+    print(f"{'DIMENSION':<18} | {'BEFORE':<8} | {'AFTER':<8} | {'STATUS':<6} | {'IMPACT'}")
+    print("-" * 70)
+
+    dims = [
+        ("Accuracy", before.accuracy, after.accuracy),
+        ("Synchronicity", before.synchronicity, after.synchronicity),
+        ("Completeness", before.completeness, after.completeness),
+        ("Readability", before.readability, after.readability),
+    ]
+    if before.sdh_coverage and after.sdh_coverage:
+        dims.append(("SDH Coverage", before.sdh_coverage, after.sdh_coverage))
+    if before.ad_coverage and after.ad_coverage:
+        dims.append(("AD Coverage", before.ad_coverage, after.ad_coverage))
+
+    for name, b_dim, a_dim in dims:
+        b_pct = f"{b_dim.score * 100:.1f}%"
+        a_pct = f"{a_dim.score * 100:.1f}%"
+        diff = (a_dim.score - b_dim.score) * 100
+        diff_str = f"+{diff:.1f}%" if diff >= 0 else f"{diff:.1f}%"
+        print(f"{name:<18} | {b_pct:<8} | {a_pct:<8} | {a_dim.status.upper():<6} | {diff_str}")
+
+    print("=" * 70)
     print(
-        f"Summary: {len(findings)} total findings "
-        f"({errors} errors, {warnings} warnings, {infos} info)\n"
+        f"Overall Status: {before.overall_status.upper()} -> {after.overall_status.upper()}\n"
     )
 
 
-def main() -> int:
+def simulate_after_fixes(
+    run: Run, fixes: list[Fix], profile
+) -> tuple[Scorecard, list[Finding]]:
+    """Simulate accepting all auto fixes, regenerate cues, and re-score."""
+    # Mark all automated fixes as accepted
+    for fix in fixes:
+        if fix.auto:
+            fix.status = "accepted"
+
+    # Ingest original cues
+    from engine.parsers import parse_timed_text
+
+    cues = parse_timed_text(run.caption_uri, kind="caption") if run.caption_uri else []
+    ad_cues = parse_timed_text(run.ad_uri, kind="ad") if (run.has_ad and run.ad_uri) else []
+
+    # Get median shift from alignment
+    from agents.multimodal import run_listen, run_look, run_transcribe
+    from agents.pipeline import FIXTURES_DIR
+
+    fixture_t = FIXTURES_DIR / "transcribe_fixture.json"
+    segments = run_transcribe(run.media_uri or "", offline_fixture=fixture_t)
+    audio_events = run_listen(
+        run.media_uri or "", offline_fixture=FIXTURES_DIR / "listen_fixture.json"
+    )
+    segments, visual_events = run_look(
+        run.media_uri or "", segments, offline_fixture=FIXTURES_DIR / "look_fixture.json"
+    )
+
+    orig_align = align_cues_to_segments(cues, segments, profile)
+    median_shift = orig_align.median_offset_ms or 0
+
+    new_cues, new_ad = apply_accepted_fixes(
+        cues, fixes, ad_cues, median_shift_ms=median_shift
+    )
+
+    # Re-evaluate
+    caption_findings = run_caption_rules(new_cues, profile)
+    alignment = align_cues_to_segments(new_cues, segments, profile)
+    semantic_findings = run_semantic_rules(
+        profile=profile,
+        alignment=alignment,
+        audio_events=audio_events,
+        visual_events=visual_events,
+        captions=new_cues,
+        ad_cues=new_ad,
+        sdh_mode=run.sdh_mode,
+    )
+    all_findings = caption_findings + alignment.findings + semantic_findings
+
+    after_scorecard = compute_scorecard(
+        cues=new_cues,
+        profile=profile,
+        alignment=alignment,
+        findings=all_findings,
+        audio_events=audio_events,
+        visual_events=visual_events,
+        ad_cues=new_ad,
+        sdh_mode=run.sdh_mode,
+    )
+
+    return after_scorecard, all_findings
+
+
+async def async_main() -> int:
     parser = argparse.ArgumentParser(description="Run CueCheck QC pipeline on sample deliverables.")
     parser.add_argument("--live", action="store_true", help="Execute live Vertex AI model calls")
     parser.add_argument("--profile", default="adult", help="Profile ID (adult or kids)")
@@ -103,62 +161,65 @@ def main() -> int:
     )
     parser.add_argument("--no-sdh", action="store_true", help="Disable SDH checks")
     parser.add_argument("--no-ad", action="store_true", help="Disable AD checks")
+    parser.add_argument(
+        "--report", default=str(SAMPLES_DIR / "report.html"), help="Output HTML report path"
+    )
 
     args = parser.parse_args()
 
-    # Load profile
     profile = load_profile(args.profile)
-    print(f"[profile] Loaded profile '{profile.name}' (ID: {profile.id})")
 
-    # Ingest captions
-    caption_path = Path(args.captions)
-    if not caption_path.exists():
-        print(f"[error] Captions file not found: {caption_path}", file=sys.stderr)
-        return 1
-    cues = parse_timed_text(caption_path, kind="caption")
-    print(f"[ingest] Parsed {len(cues)} caption cues from {caption_path.name}")
-
-    # Ingest AD script if present
-    ad_cues = None
-    if not args.no_ad:
-        ad_path = Path(args.ad)
-        if ad_path.exists():
-            ad_cues = parse_timed_text(ad_path, kind="ad")
-            print(f"[ingest] Parsed {len(ad_cues)} AD cues from {ad_path.name}")
-
-    # Step 1: Deterministic caption rules
-    print("[pipeline] Running deterministic caption rules...")
-    caption_findings = run_caption_rules(cues, profile)
-
-    # Step 2: Ground truth pass (Transcribe, Listen, Look)
-    print("[pipeline] Acquiring multimodal ground truth...")
-    segments, audio_events, visual_events = load_ground_truth(args.live, args.media)
-    print(
-        f"[pipeline] Transcribed {len(segments)} segments, "
-        f"{len(audio_events)} audio events, {len(visual_events)} visual events"
-    )
-
-    # Step 3: Alignment
-    print("[pipeline] Aligning captions to speech segments...")
-    alignment = align_cues_to_segments(cues, segments, profile)
-    alignment_findings = alignment.findings
-
-    # Step 4: Semantic rules (SDH & AD)
-    print("[pipeline] Evaluating semantic accessibility rules...")
-    semantic_findings = run_semantic_rules(
-        profile=profile,
-        alignment=alignment,
-        audio_events=audio_events,
-        visual_events=visual_events,
-        captions=cues,
-        ad_cues=ad_cues,
+    run = Run(
+        id="sample-run-001",
+        profile_id=args.profile,
         sdh_mode=not args.no_sdh,
+        has_ad=not args.no_ad,
+        media_uri=args.media,
+        caption_uri=args.captions,
+        ad_uri=args.ad,
     )
 
-    all_findings = caption_findings + alignment_findings + semantic_findings
-    print_findings_table(all_findings)
+    def on_trace(step: TraceStep, _run: Run) -> None:
+        dur_str = f"({step.duration_s}s)" if step.duration_s > 0 else ""
+        print(f"[{step.step_name:<14}] {step.status.upper():<9} {step.summary} {dur_str}")
+
+    print("=== CueCheck QC SequentialAgent Pipeline ===")
+    await execute_pipeline(run, live=args.live, trace_callback=on_trace)
+
+    print_findings_table(run.findings)
+
+    print("\nSummary:")
+    print(f"  Status: {run.status}")
+    print(f"  Findings: {len(run.findings)}")
+    print(f"  Fixes: {len(run.fixes)}")
+    if run.scorecard:
+        print(f"  Overall: {run.scorecard.overall_status}")
+
+    # Calculate after scores
+    after_scorecard, _ = simulate_after_fixes(run, run.fixes, profile)
+    if run.scorecard:
+        print_scorecard_comparison(run.scorecard, after_scorecard)
+
+    # Save HTML report
+    report_path = Path(args.report)
+    save_html_report(
+        filepath=report_path,
+        run_id=run.id,
+        profile=profile,
+        scorecard=run.scorecard,  # type: ignore
+        findings=run.findings,
+        fixes=run.fixes,
+        after_scorecard=after_scorecard,
+    )
+    print(f"[report] Saved HTML audit report with before/after scores to: {report_path.resolve()}")
+
     return 0
 
 
+def main() -> int:
+    return asyncio.run(async_main())
+
+
 if __name__ == "__main__":
+    import sys
     sys.exit(main())
