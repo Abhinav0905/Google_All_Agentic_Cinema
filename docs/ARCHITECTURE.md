@@ -24,7 +24,7 @@ flowchart TD
   listen --> vertex
   look --> vertex
   vertex --> gcs
-  score --> store[InMemoryRunStore]
+  score --> store[SqlAlchemyStore]
   spa -->|"GET /api/runs/id/events SSE"| api
   spa -->|"accept or reject fix"| api
   spa -->|"export srt vtt json report"| api
@@ -40,7 +40,7 @@ flowchart LR
   end
   subgraph http [api]
     routes[FastAPIRoutes]
-    mem[RunStore]
+    mem[SqlAlchemyStore]
   end
   subgraph adk [agents]
     seq[SequentialAgent]
@@ -85,7 +85,7 @@ Thresholds are never hardcoded in the engine. They come from `profiles/adult.jso
 
 - `engine/` — parsers, rules, alignment, fixer, scoring, export, HTML report. No FastAPI or ADK imports.
 - `agents/` — SequentialAgent, prompts, Vertex client. `agents/agent.py` exports `root_agent` for `adk web .`
-- `api/` — HTTP, SSE, signed URLs, in-memory store. Postgres replaces the store in Phase 6.
+- `api/` — HTTP, SSE, signed URLs, SQLAlchemy store (`qc_runs`, `qc_findings`, `qc_fixes`, `qc_decisions`). SQLite locally; Postgres on Replit.
 - `web/` — New QC, Run (trace, scorecard, timeline, findings, drawer, export), History
 - `profiles/` — editable spec numbers
 - `samples/` — seeded defective captions and AD script used by **Load sample**

@@ -59,6 +59,12 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the mermaid diagrams.
 
 Google Cloud used at runtime: Vertex AI Gemini (`agents/multimodal.py`, `scripts/smoke_gcp.py`), Cloud Storage signed URLs (`engine/gcs.py`, `api/main.py`). Speech-to-Text v2 is optional and off by default.
 
+History is stored in SQLite locally (`.data/cuecheck.sqlite`) or Replit Postgres when `DATABASE_URL` is set. See [docs/TOOLING.md](docs/TOOLING.md) for the Replit Agent handoff.
+
+## Replit
+
+Import this repo into Replit. The workspace uses Python 3.11 + Node. `scripts/replit_build.sh` builds `web/dist`. `scripts/replit_start.sh` serves FastAPI on `$PORT`. Attach Replit Postgres so History survives a restart. Paste-ready Agent tasks are in [docs/TOOLING.md](docs/TOOLING.md).
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).

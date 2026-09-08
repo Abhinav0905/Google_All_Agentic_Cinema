@@ -149,6 +149,9 @@ export default function NewQc({
             <span className="tc">VERTEX {health.vertex ? "READY" : "OFFLINE"}</span>
             <span className="tc">GCS {health.gcs ? "READY" : "LOCAL MODE"}</span>
             <span className="tc">STT {health.stt ? "ON" : "OFF"}</span>
+            <span className="tc">
+              DATABASE {health.database === "postgres" ? "POSTGRES" : "SQLITE"}
+            </span>
           </>
         )}
       </div>

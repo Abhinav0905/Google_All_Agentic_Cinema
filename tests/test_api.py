@@ -30,6 +30,8 @@ def test_health():
         assert "vertex" in body
         assert "gcs" in body
         assert "stt" in body
+        assert body["database"] in ("sqlite", "postgres")
+        assert body["history_persisted"] is True
 
 
 def test_create_run_and_history():
@@ -45,6 +47,10 @@ def test_create_run_and_history():
         assert listed.status_code == 200
         assert any(row["id"] == body["id"] for row in listed.json())
 
+        store.drop_cache()
+        listed_again = client.get("/api/runs")
+        assert any(row["id"] == body["id"] for row in listed_again.json())
+
 
 def test_sample_run_accept_and_export():
     store.clear()
@@ -53,6 +59,9 @@ def test_sample_run_accept_and_export():
         assert started.status_code == 200
         run_id = started.json()["id"]
         finished = _wait_complete(client, run_id)
+        assert finished["status"] == "completed"
+        store.drop_cache()
+        finished = client.get(f"/api/runs/{run_id}").json()
         assert finished["status"] == "completed"
         assert finished["scorecard"] is not None
         assert len(finished["findings"]) > 0

@@ -18,3 +18,14 @@ def test_readme_leads_with_sample():
     assert "Load sample" in text
     assert "uvicorn api.main:app" in text
     assert "docs/ARCHITECTURE.md" in text
+    assert "docs/TOOLING.md" in text
+
+
+def test_tooling_doc_covers_replit_agent():
+    text = (ROOT / "docs" / "TOOLING.md").read_text(encoding="utf-8")
+    assert "Replit Agent" in text
+    assert "Antigravity" in text
+    assert "qc_runs" in text
+    assert "Load sample" in text
+    assert (ROOT / ".replit").exists()
+    assert (ROOT / "replit.nix").exists()
