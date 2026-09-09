@@ -61,7 +61,7 @@ npm run build --prefix web
 
 ## Development record
 
-The initial implementation was created with Google Antigravity, as reported by the author. Codex assisted with the FrameKind rename, interface redesign, security fixes, export fixes, testing and deployment preparation. Replit Agent checked the imported environment, added a Postgres module and started the build before its free quota stopped the task. Later build troubleshooting and checks were manual. See the [tooling record](docs/TOOLING.md) for attribution. Runtime AI uses Google models; that does not establish eligibility under the contest's development-tool restrictions.
+The initial implementation was created with Google Antigravity, as reported by the author. Replit Agent checked the imported environment, added a Postgres module and started the build before its free quota stopped the task. Later build troubleshooting and checks were manual. See the [tooling record](docs/TOOLING.md) for attribution. Runtime AI uses Google models; that does not establish eligibility under the contest's development-tool restrictions.
 
 ## License
 
