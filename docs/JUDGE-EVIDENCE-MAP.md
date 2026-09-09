@@ -49,3 +49,5 @@ The local verification workspace retains the live run and check summary. Do not 
 The [cover](screenshots/framekind-cover.png), [recording script](DEMO_SCRIPT.md), sample media and setup instructions exist. Devpost has the FrameKind title, story, repository, cover, public app link and additional information saved. The draft is at finalization, 3/5. A public video URL and final terms/action remain; the entry has not been formally submitted.
 
 The [official rules](https://agentic-cinema.devpost.com/rules) require public source, a working project demonstration and a publicly visible YouTube or Vimeo video. Keep the video within three minutes and provide English narration or subtitles. The published deadline is September 9, 2026 at 2:00 p.m. PDT. Recheck the live form before the final submission.
+
+Final persistence check: after deployment of documented build `4187546`, uploaded live review `df0c56c3` retained 36 findings, its approved edit and a playable 60-second video after a full page reload. Its new 1,189-byte SRT matched the earlier export byte for byte. See [Replit verification](REPLIT_VERIFICATION.md).

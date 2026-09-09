@@ -2,7 +2,7 @@
 
 Updated September 9, 2026. [Public app](https://google-all-agentic-cinema--abhinav0905.replit.app) · [Replit workspace](https://replit.com/@abhinav0905/GoogleAllAgenticCinema) · [Public source](https://github.com/Abhinav0905/Google_All_Agentic_Cinema).
 
-The app is published with runtime revision `c0fc1f3`. Production uses Postgres, Google Vertex ADC credentials, one Uvicorn process and one Autoscale instance (2 vCPU, 4 GiB). The free deployment expires October 8, 2026. Check availability through the end of judging that day; no paid plan was purchased.
+The app is published from documented build `4187546`, with runtime revision `c0fc1f3`. Production uses Postgres, Google Vertex ADC credentials, one Uvicorn process and one Autoscale instance (2 vCPU, 4 GiB). The free deployment expires October 8, 2026. Check availability through the end of judging that day; no paid plan was purchased.
 
 ## Observed Replit Agent work
 
@@ -29,6 +29,7 @@ References: [uv environment paths](https://docs.astral.sh/uv/concepts/projects/c
 - After republishing `c0fc1f3`, that same browser reopened the saved sample, its approved decision and the 60-second video. A second SRT download was byte-for-byte identical to the download before republishing. This verifies the sample's saved record and decision across replacement of the serving process.
 - Fresh browser upload `df0c56c3-4cde-49cf-8baa-6eb58fd9cba3` on `c0fc1f3` completed all eight steps with 36 findings and 23 proposals. The actual JSON report downloaded. A phone-caption repair was approved and its 1,189-byte SRT downloaded.
 - A separate client created a review, waited 180.6 seconds and created another successfully. Both responses were HTTP 201 after the connection fix.
+- After publishing documented build `4187546`, the same browser reopened uploaded live run `df0c56c3`. All 36 findings and its approved edit remained. The video loaded from the hosted `/media` route with duration 60 seconds and readyState 4, after a full page reload. Its new 1,189-byte SRT was identical to the pre-deployment download. This verifies restoration of an uploaded video, its review and decision across replacement of the serving process.
 
 The earlier hosted model result invented a visual event, a woman slapping a man, that is absent from the authored animation. It is a model error. Proposed findings require human review; successful execution is not measured accuracy or accessibility certification.
 
