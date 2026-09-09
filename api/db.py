@@ -120,7 +120,9 @@ def _create_engine(url: str) -> Engine:
         )
     if url.startswith("sqlite:///"):
         return create_engine(url, connect_args={"check_same_thread": False})
-    return create_engine(url)
+    # Hosted Postgres can close idle connections during suspension or restart.
+    # Replace a dead pooled connection before a request begins its transaction.
+    return create_engine(url, pool_pre_ping=True)
 
 
 def reset_engine(url: Optional[str] = None) -> Engine:
