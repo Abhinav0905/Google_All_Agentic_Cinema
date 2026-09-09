@@ -15,9 +15,7 @@ from typing import List, Optional
 from engine.alignment import AlignmentResult
 from engine.models import AudioEvent, Cue, Finding, Profile, Segment, VisualEvent
 
-RE_SPEAKER_LABEL = re.compile(
-    r"^[A-Z0-9\s\-]+:|^\[[a-zA-Z0-9\s\-]+\]|^\([a-zA-Z0-9\s\-]+\)"
-)
+RE_SPEAKER_LABEL = re.compile(r"^[A-Z0-9\s\-]+:|^\[[a-zA-Z0-9\s\-]+\]|^\([a-zA-Z0-9\s\-]+\)")
 
 
 def check_sdh_missing_sfx(
@@ -27,7 +25,7 @@ def check_sdh_missing_sfx(
     """SDH_MISSING_SFX: salient audio event with no tagged cue in [t-1000ms, t+2000ms]."""
     findings: List[Finding] = []
 
-    for event in audio_events:
+    for event_index, event in enumerate(audio_events):
         window_start = event.t_ms - 1000
         window_end = event.t_ms + 2000
 
@@ -45,7 +43,7 @@ def check_sdh_missing_sfx(
             severity = "error" if event.salience == "plot" else "warning"
             findings.append(
                 Finding(
-                    id=f"SDH_MISSING_SFX_{event.t_ms}",
+                    id=f"SDH_MISSING_SFX_{event.t_ms}_{event_index}",
                     code="SDH_MISSING_SFX",
                     severity=severity,
                     cue_index=None,
@@ -54,9 +52,7 @@ def check_sdh_missing_sfx(
                     message=(
                         f"Missing SDH sound tag for {event.salience} audio event: {event.label}"
                     ),
-                    evidence=(
-                        f"Event '{event.label}' at {event.t_ms}ms has no caption sound tag"
-                    ),
+                    evidence=(f"Event '{event.label}' at {event.t_ms}ms has no caption sound tag"),
                     spec_ref="SDH audio description standard for non-speech sound effects",
                 )
             )
@@ -87,9 +83,7 @@ def check_sdh_missing_speaker_id(
                         cue_index=cue.index,
                         start_ms=cue.start_ms,
                         end_ms=cue.end_ms,
-                        message=(
-                            f"Off-screen dialogue missing speaker label: '{cue.text}'"
-                        ),
+                        message=(f"Off-screen dialogue missing speaker label: '{cue.text}'"),
                         evidence=(
                             f"Speaker '{label}' is off-screen at {seg.start_ms}ms, "
                             f"cue {cue.index} lacks speaker identification prefix"
@@ -111,29 +105,35 @@ def check_ad_overlaps_dialogue(
     tol_ms = profile.ad_overlap_tolerance_ms.value
 
     for ad_cue in ad_cues:
+        overlaps = []
         for seg in segments:
-            # Calculate overlap duration
             overlap = min(ad_cue.end_ms, seg.end_ms) - max(ad_cue.start_ms, seg.start_ms)
             if overlap > tol_ms:
-                findings.append(
-                    Finding(
-                        id=f"AD_OVERLAPS_DIALOGUE_{ad_cue.index}_{ad_cue.start_ms}",
-                        code="AD_OVERLAPS_DIALOGUE",
-                        severity="error",
-                        cue_index=ad_cue.index,
-                        start_ms=ad_cue.start_ms,
-                        end_ms=ad_cue.end_ms,
-                        message=(
-                            f"Audio Description cue {ad_cue.index} overlaps dialogue "
-                            f"by {overlap}ms (tolerance {tol_ms}ms)"
-                        ),
-                        evidence=(
-                            f"AD cue {ad_cue.index} ({ad_cue.start_ms}-{ad_cue.end_ms}ms) "
-                            f"overlaps speech segment ({seg.start_ms}-{seg.end_ms}ms): '{seg.text}'"
-                        ),
-                        spec_ref=profile.ad_overlap_tolerance_ms.source,
-                    )
+                overlaps.append((seg, overlap))
+        if overlaps:
+            evidence = "; ".join(
+                f"speech ({seg.start_ms}-{seg.end_ms}ms), overlap {overlap}ms: '{seg.text}'"
+                for seg, overlap in overlaps
+            )
+            findings.append(
+                Finding(
+                    id=f"AD_OVERLAPS_DIALOGUE_{ad_cue.index}_{ad_cue.start_ms}",
+                    code="AD_OVERLAPS_DIALOGUE",
+                    severity="error",
+                    cue_index=ad_cue.index,
+                    start_ms=ad_cue.start_ms,
+                    end_ms=ad_cue.end_ms,
+                    message=(
+                        f"Audio Description cue {ad_cue.index} overlaps "
+                        f"{len(overlaps)} speech segment(s) beyond the {tol_ms}ms tolerance"
+                    ),
+                    evidence=(
+                        f"AD cue {ad_cue.index} ({ad_cue.start_ms}-{ad_cue.end_ms}ms) "
+                        f"overlaps {evidence}"
+                    ),
+                    spec_ref=profile.ad_overlap_tolerance_ms.source,
                 )
+            )
 
     return findings
 
@@ -145,7 +145,7 @@ def check_ad_gap(
     """AD_GAP: essential visual event with no AD cue in [t-1000ms, t+4000ms]."""
     findings: List[Finding] = []
 
-    for event in visual_events:
+    for event_index, event in enumerate(visual_events):
         if not event.essential:
             continue
 
@@ -161,7 +161,7 @@ def check_ad_gap(
         if not covered:
             findings.append(
                 Finding(
-                    id=f"AD_GAP_{event.t_ms}",
+                    id=f"AD_GAP_{event.t_ms}_{event_index}",
                     code="AD_GAP",
                     severity="error",
                     cue_index=None,
@@ -185,7 +185,7 @@ def check_ad_onscreen_text(
     findings: List[Finding] = []
     text_events = [e for e in visual_events if e.kind == "onscreen_text"]
 
-    for event in text_events:
+    for event_index, event in enumerate(text_events):
         label_lower = event.label.lower().strip()
         window_start = event.t_ms - 2000
         window_end = event.t_ms + 6000
@@ -209,7 +209,7 @@ def check_ad_onscreen_text(
         if not found:
             findings.append(
                 Finding(
-                    id=f"AD_ONSCREEN_TEXT_{event.t_ms}",
+                    id=f"AD_ONSCREEN_TEXT_{event.t_ms}_{event_index}",
                     code="AD_ONSCREEN_TEXT",
                     severity="warning",
                     cue_index=None,
@@ -249,7 +249,9 @@ def check_ad_reading_rate(
                     start_ms=cue.start_ms,
                     end_ms=cue.end_ms,
                     message=f"AD reading rate ({wpm:.0f} WPM) exceeds maximum ({max_wpm} WPM)",
-                    evidence=f"word_count={len(words)}, duration={duration_min*60:.1f}s, wpm={wpm}",
+                    evidence=(
+                        f"word_count={len(words)}, duration={duration_min * 60:.1f}s, wpm={wpm}"
+                    ),
                     spec_ref=profile.ad_max_wpm.source,
                 )
             )

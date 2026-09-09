@@ -21,6 +21,8 @@ logger = logging.getLogger("cuecheck.multimodal")
 
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "tests" / "fixtures"
+# Base64 plus prompts stays below a 20 MB inline request.
+INLINE_VIDEO_MAX_BYTES = 14 * 1024 * 1024
 
 
 class TranscribeResponse(BaseModel):
@@ -64,9 +66,27 @@ def get_genai_client():
     """Create GenAI client configured for Vertex AI backend."""
     from google import genai
 
+    api_key = os.environ.get("VERTEX_API_KEY", "").strip()
+    if api_key:
+        return genai.Client(vertexai=True, api_key=api_key)
     project = os.environ.get("GOOGLE_CLOUD_PROJECT")
     location = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
     return genai.Client(vertexai=True, project=project, location=location)
+
+
+def media_part(media_uri: str):
+    """Build a Vertex video part from a GCS URI or an API-owned local file."""
+    from google.genai import types
+
+    if media_uri.startswith("gs://"):
+        return types.Part.from_uri(file_uri=media_uri, mime_type="video/mp4")
+    path = Path(media_uri)
+    if not path.is_file():
+        raise ValueError("Uploaded video is unavailable. Upload the MP4 again.")
+    size = path.stat().st_size
+    if not 0 < size <= INLINE_VIDEO_MAX_BYTES:
+        raise ValueError("Inline video must be nonempty and no larger than 14 MiB.")
+    return types.Part.from_bytes(data=path.read_bytes(), mime_type="video/mp4")
 
 
 def run_transcribe(
@@ -75,7 +95,9 @@ def run_transcribe(
     offline_fixture: Optional[Path] = None,
 ) -> List[Segment]:
     """Transcribe spoken dialogue from video into Segment models."""
-    if offline_fixture and offline_fixture.exists():
+    if offline_fixture and not offline_fixture.exists():
+        raise FileNotFoundError(f"Sample fixture is missing: {offline_fixture.name}")
+    if offline_fixture:
         with open(offline_fixture, "r", encoding="utf-8") as f:
             data = json.load(f)
         return [Segment.model_validate(s) for s in data.get("segments", [])]
@@ -91,7 +113,7 @@ def run_transcribe(
         response = client.models.generate_content(
             model=model,
             contents=[
-                types.Part.from_uri(file_uri=media_uri, mime_type="video/mp4"),
+                media_part(media_uri),
                 prompt,
             ],
             config=types.GenerateContentConfig(
@@ -116,7 +138,9 @@ def run_listen(
     offline_fixture: Optional[Path] = None,
 ) -> List[AudioEvent]:
     """Detect non-speech audio events from video."""
-    if offline_fixture and offline_fixture.exists():
+    if offline_fixture and not offline_fixture.exists():
+        raise FileNotFoundError(f"Sample fixture is missing: {offline_fixture.name}")
+    if offline_fixture:
         with open(offline_fixture, "r", encoding="utf-8") as f:
             data = json.load(f)
         return [AudioEvent.model_validate(e) for e in data.get("events", [])]
@@ -132,7 +156,7 @@ def run_listen(
         response = client.models.generate_content(
             model=model,
             contents=[
-                types.Part.from_uri(file_uri=media_uri, mime_type="video/mp4"),
+                media_part(media_uri),
                 prompt,
             ],
             config=types.GenerateContentConfig(
@@ -158,7 +182,9 @@ def run_look(
     offline_fixture: Optional[Path] = None,
 ) -> Tuple[List[Segment], List[VisualEvent]]:
     """Perform visual pass: speaker on-screen visibility and essential visual events."""
-    if offline_fixture and offline_fixture.exists():
+    if offline_fixture and not offline_fixture.exists():
+        raise FileNotFoundError(f"Sample fixture is missing: {offline_fixture.name}")
+    if offline_fixture:
         with open(offline_fixture, "r", encoding="utf-8") as f:
             data = json.load(f)
         vis_map: Dict[int, bool] = {
@@ -190,7 +216,7 @@ def run_look(
         response = client.models.generate_content(
             model=model,
             contents=[
-                types.Part.from_uri(file_uri=media_uri, mime_type="video/mp4"),
+                media_part(media_uri),
                 full_prompt,
             ],
             config=types.GenerateContentConfig(

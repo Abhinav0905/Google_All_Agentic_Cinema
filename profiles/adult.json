@@ -1,67 +1,67 @@
 {
   "id": "adult",
-  "name": "Adult Broadcast / Streaming",
-  "description": "Timed-text specification profile for general broadcast and streaming delivery.",
+  "name": "General reading (project preset)",
+  "description": "Editable project review thresholds. These are not regulatory or distributor certification criteria.",
   "max_cps": {
     "value": 20,
-    "source": "Standard streaming timed-text guideline (e.g. Netflix / BBC subtitle guide) for adult reading speeds"
+    "source": "Project reading-speed limit in characters per second."
   },
   "max_chars_per_line": {
     "value": 42,
-    "source": "Standard line limit for Latin script captions to prevent video obstruction and edge cropping"
+    "source": "Project maximum characters per caption line."
   },
   "max_lines": {
     "value": 2,
-    "source": "EBU / FCC standard 2-line maximum for readability"
+    "source": "Project maximum caption lines."
   },
   "min_duration_ms": {
     "value": 833,
-    "source": "5/6 of a second (20 frames at 24fps), minimum eye recognition threshold"
+    "source": "Project minimum caption display duration in milliseconds."
   },
   "max_duration_ms": {
     "value": 7000,
-    "source": "7 seconds maximum to ensure synchronization with spoken dialog"
+    "source": "Project maximum caption display duration in milliseconds."
   },
   "min_gap_ms": {
     "value": 83,
-    "source": "2 frames at 24fps (~83ms), ensures subtitle decoder clears between consecutive cues"
+    "source": "Project minimum gap between captions in milliseconds."
   },
   "sync_tolerance_ms": {
     "value": 500,
-    "source": "FCC 47 CFR 79.1 caption synchronicity standard (start within 0.5s of speech)"
+    "source": "Project tolerance for the difference between caption and detected speech start."
   },
   "ad_overlap_tolerance_ms": {
     "value": 250,
-    "source": "Audio description overlap buffer, prevents AD narration from masking dialogue onset"
+    "source": "Project review tolerance for audio-description overlap with dialogue."
   },
   "ad_max_wpm": {
     "value": 180,
-    "source": "Descriptive Video Service standard spoken rate upper limit"
+    "source": "Project audio-description reading-rate limit in words per minute."
   },
   "pass_thresholds": {
     "accuracy": {
       "value": 0.98,
-      "source": "FCC caption quality accuracy benchmark (>= 98% word accuracy)"
+      "source": "Project review threshold for accuracy; not an FCC or distributor benchmark."
     },
     "synchronicity": {
       "value": 0.95,
-      "source": "FCC caption synchronicity benchmark (>= 95% cues within 500ms tolerance)"
+      "source": "Project review threshold for synchronicity; not an FCC or distributor benchmark."
     },
     "completeness": {
       "value": 0.98,
-      "source": "FCC caption completeness benchmark (>= 98% dialogue represented)"
+      "source": "Project review threshold for completeness; not an FCC or distributor benchmark."
     },
     "readability": {
       "value": 0.95,
-      "source": "Streaming timed-text benchmark (>= 95% cues adhering to duration, speed, line rules)"
+      "source": "Project review threshold for readability; not an FCC or distributor benchmark."
     },
     "sdh": {
-      "value": 0.90,
-      "source": "SDH accessibility standard (>= 90% salient non-speech and off-screen cues tagged)"
+      "value": 0.9,
+      "source": "Project review threshold for sdh; not an FCC or distributor benchmark."
     },
     "ad": {
-      "value": 0.90,
-      "source": "Audio description accessibility benchmark (>= 90% essential visual events described)"
+      "value": 0.9,
+      "source": "Project review threshold for ad; not an FCC or distributor benchmark."
     }
   }
 }

@@ -3,7 +3,7 @@
 from typing import List, Optional, Tuple
 
 from api.store import StoredRun
-from engine.alignment import align_cues_to_segments
+from engine.alignment import AlignmentResult, align_cues_to_segments
 from engine.export import export_cues
 from engine.fixer import apply_accepted_fixes
 from engine.models import Cue, Finding, Profile, Scorecard
@@ -20,15 +20,24 @@ def rescore_cues(
     profile: Profile,
 ) -> Tuple[Scorecard, List[Finding]]:
     caption_findings = run_caption_rules(cues, profile)
-    alignment = align_cues_to_segments(cues, stored.segments, profile)
-    semantic_findings = run_semantic_rules(
-        profile=profile,
-        alignment=alignment,
-        audio_events=stored.audio_events,
-        visual_events=stored.visual_events,
-        captions=cues,
-        ad_cues=ad_cues,
-        sdh_mode=stored.run.sdh_mode,
+    media_analyzed = stored.run.analysis_mode != "caption_only"
+    alignment = (
+        align_cues_to_segments(cues, stored.segments, profile)
+        if media_analyzed
+        else AlignmentResult()
+    )
+    semantic_findings = (
+        run_semantic_rules(
+            profile=profile,
+            alignment=alignment,
+            audio_events=stored.audio_events,
+            visual_events=stored.visual_events,
+            captions=cues,
+            ad_cues=ad_cues,
+            sdh_mode=stored.run.sdh_mode,
+        )
+        if media_analyzed
+        else []
     )
     findings = caption_findings + alignment.findings + semantic_findings
     scorecard = compute_scorecard(
@@ -40,6 +49,7 @@ def rescore_cues(
         visual_events=stored.visual_events,
         ad_cues=ad_cues,
         sdh_mode=stored.run.sdh_mode,
+        media_analyzed=media_analyzed,
     )
     return scorecard, findings
 

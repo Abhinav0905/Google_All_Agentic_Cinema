@@ -52,3 +52,6 @@ samples/report.html
 # OS specific
 .DS_Store
 Thumbs.db
+
+# Local build and recording scratch
+work/

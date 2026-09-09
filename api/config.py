@@ -41,13 +41,21 @@ def bootstrap_env() -> None:
 
 
 def gcp_configured() -> bool:
+    if os.environ.get("VERTEX_API_KEY", "").strip():
+        return True
     project = os.environ.get("GOOGLE_CLOUD_PROJECT", "")
     return bool(project and project != "your-gcp-project-id")
 
 
 def gcs_configured() -> bool:
     bucket = os.environ.get("GCS_BUCKET", "")
-    return gcp_configured() and bool(bucket and bucket != "your-cuecheck-media-bucket")
+    project = os.environ.get("GOOGLE_CLOUD_PROJECT", "")
+    return bool(
+        project
+        and project != "your-gcp-project-id"
+        and bucket
+        and bucket != "your-cuecheck-media-bucket"
+    )
 
 
 def signed_url_ttl() -> int:

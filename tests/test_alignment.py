@@ -128,3 +128,18 @@ def test_alignment_low_accuracy():
     accuracy_findings = [f for f in result.findings if f.code == "ACCURACY_LOW"]
     assert len(accuracy_findings) == 1
     assert accuracy_findings[0].severity == "warning"
+
+
+def test_simultaneous_missing_dialogue_keeps_each_segment_and_distinct_fixes():
+    from engine.fixer import plan_fixes
+
+    segments = [
+        Segment(start_ms=1000, end_ms=2000, text="First speaker words."),
+        Segment(start_ms=1000, end_ms=2000, text="Second speaker words."),
+    ]
+    profile = load_profile("adult")
+    alignment = align_cues_to_segments([], segments, profile)
+    assert len(alignment.findings) == len({f.id for f in alignment.findings}) == 2
+    fixes = plan_fixes(alignment.findings, [], profile, alignment=alignment)
+    assert {fix.after.text for fix in fixes} == {s.text for s in segments}
+    assert len(fixes) == len({fix.id for fix in fixes}) == 2
