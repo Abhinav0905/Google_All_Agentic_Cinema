@@ -6,7 +6,7 @@ FrameKind helps film editors find missing sound captions, rushed dialogue and ti
 
 ## Try it locally
 
-Requires Python 3.11+, Node 20+ and FFmpeg/FFprobe.
+Requires Python 3.11 or 3.12, Node 20+ and FFmpeg/FFprobe. Replit deploys with Python 3.11; the supported range is bounded so its universal dependency resolver does not target untested future Python versions.
 
 ```bash
 python3.11 -m venv .venv

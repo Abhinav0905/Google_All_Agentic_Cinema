@@ -6,14 +6,14 @@
 |---|---|---|
 | Google Antigravity | Initial engine, ADK pipeline, API and React app | Author-reported initial build |
 | Codex | FrameKind rename, interface redesign, security and export repairs, tests and deployment preparation | Repository changes and tests |
-| Replit Agent | Deployment verification task planned | Pending actual Agent session |
+| Replit Agent | Inspected the imported project, checked runtime tools and Postgres, added the `postgresql-16` module and ran the build script | Actions observed in Replit; free quota stopped the task before full verification. See [Replit record](REPLIT_VERIFICATION.md). |
 | Gemini on Google Cloud Vertex | Live transcription, sound detection and visual analysis | Two complete local live media runs verified; see docs/SUBMISSION_READINESS.md |
 
 The instant sample uses authored fixtures. It is not a recording of a live model response. Do not describe this project as developed exclusively with Google tools. The organizer's restriction on Codex assistance means contest eligibility cannot be asserted from this repository.
 
 ## Replit setup
 
-Import https://github.com/Abhinav0905/Google_All_Agentic_Cinema into Replit.
+Core revision `5a5f9a0` from [GitHub](https://github.com/Abhinav0905/Google_All_Agentic_Cinema) was imported into the [Replit project](https://replit.com/@abhinav0905/GoogleAllAgenticCinema). Public GitHub head `7184eff` includes the first evidence documents. The app home is visible in the Replit Run preview. Public publishing and hosted runtime checks remain pending.
 
 - Build command: `bash scripts/replit_build.sh`
 - Run command: `bash scripts/replit_start.sh`
@@ -27,7 +27,7 @@ The optional GCS path requires ADC or `GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_CLO
 
 ## Bounded Replit Agent task
 
-Use this prompt after importing the final commit:
+This prompt was issued after import. The Agent performed part of the task before reaching its free quota; the full checklist has not passed. Use the remaining checks after the quota stop as the verification plan, without treating them as completed Agent work.
 
 > This is FrameKind, a FastAPI + React accessibility review app. Verify the imported repository builds and runs on Replit using scripts/replit_build.sh and scripts/replit_start.sh. Preserve the existing UI and Google-only runtime AI SDKs. Check Python, Node and FFmpeg availability, port binding and static asset serving. Attach Replit Postgres if available and verify that a sample run and its accepted repair survive a process restart for the same browser session. Fix any Replit-specific deployment issue you reproduce. Record the exact checks and files changed in docs/REPLIT_VERIFICATION.md. Do not expose secret values. Do not claim deployment success until the public URL works.
 
