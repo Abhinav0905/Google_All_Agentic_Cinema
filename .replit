@@ -21,5 +21,7 @@ localPort = 8000
 externalPort = 80
 
 [env]
+# Use a real writable virtual environment, not Replit's user-package prefix.
+UV_PROJECT_ENVIRONMENT = ".venv"
 PYTHONPATH = "."
 PYTHONUNBUFFERED = "1"

@@ -29,3 +29,15 @@ The two successful live Vertex reviews and 108 passing tests described in [submi
 - Verify deployment uses one serving process and one instance, and record the final deployed revision and public URL.
 
 Replit Agent contributed the setup work above. Public hosting remains a separate pending check. This record does not resolve the development-tool eligibility issue documented in [TOOLING.md](TOOLING.md).
+
+## Publishing installer diagnosis, September 9
+
+The managed publishing installer reached `uv sync` but tried to install `propcache` under the read-only Nix Python `site-packages` directory. The observed error was `Permission denied (os error 13)`.
+
+Replit Shell reported `UV_PROJECT_ENVIRONMENT=/home/runner/workspace/.pythonlibs` and `PYTHONUSERBASE` pointing to the same directory. `.pythonlibs` was a directory with no `pyvenv.cfg`, and its Python executable resolved to the Nix interpreter. It was a user-package prefix, not an isolated virtual environment.
+
+The explicit command `UV_PROJECT_ENVIRONMENT=.venv uv sync --frozen` succeeded in Replit Shell: uv created `.venv` and installed 77 packages. `.venv/bin/python` then imported `fastapi`, `sqlalchemy` and `google.adk` and printed `runtime imports OK`.
+
+The repository now sets `UV_PROJECT_ENVIRONMENT=.venv` in `.replit`. The build script uses the frozen lockfile with that same environment, and the startup script runs `.venv/bin/python` without installing packages at boot. An explicitly activated local virtual environment remains usable outside Replit. This successful Shell check is not proof of a successful public deployment; the public-URL checks above remain required.
+
+Reference: [uv project environment path](https://docs.astral.sh/uv/concepts/projects/config/#project-environment-path).
