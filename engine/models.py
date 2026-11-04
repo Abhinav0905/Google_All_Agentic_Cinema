@@ -86,6 +86,7 @@ class Fix(BaseModel):
     type: str  # e.g. extend, re-wrap, split, trim, global_shift, normalize
     before: Optional[Cue] = None
     after: Optional[Cue] = None
+    after_extra: Optional[Cue] = None  # second half for split
     auto: bool = True
     status: Literal["proposed", "accepted", "rejected"] = "proposed"
 

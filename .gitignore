@@ -44,6 +44,9 @@ web/node_modules/
 *.key
 *service-account*.json
 
+# Generated reports
+samples/report.html
+
 # OS specific
 .DS_Store
 Thumbs.db
