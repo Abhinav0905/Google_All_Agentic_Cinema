@@ -3,6 +3,8 @@
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+from sqlalchemy import text
+
 from api import db as dbmod
 from api.db import (
     apply_decisions_to_run,
@@ -28,6 +30,33 @@ def test_normalize_replit_postgres_url():
 def test_default_backend_is_sqlite_without_env_postgres():
     assert database_backend("sqlite:///tmp/x.sqlite") == "sqlite"
     assert database_backend("postgresql+psycopg://u:p@h/db") == "postgres"
+
+
+def test_hosted_pool_recovers_when_an_idle_connection_is_closed(tmp_path, monkeypatch):
+    """Use production pool options with a local DB to simulate an idle disconnect."""
+    create_engine = dbmod.create_engine
+
+    def local_database(url, **options):
+        # No Postgres service or network is needed to exercise pool checkout.
+        assert url == "postgresql+psycopg://unused/local-test"
+        return create_engine(f"sqlite:///{tmp_path / 'pool.sqlite'}", **options)
+
+    monkeypatch.setattr(dbmod, "create_engine", local_database)
+    engine = dbmod._create_engine("postgresql+psycopg://unused/local-test")
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("create table marker (value integer)"))
+            connection.execute(text("insert into marker values (42)"))
+            idle_connection = connection.connection.driver_connection
+
+        # The connection is already back in the pool when the server closes it.
+        idle_connection.close()
+
+        with engine.connect() as connection:
+            assert connection.scalar(text("select value from marker")) == 42
+            assert connection.connection.driver_connection is not idle_connection
+    finally:
+        engine.dispose()
 
 
 def test_run_reloads_after_cache_drop():
