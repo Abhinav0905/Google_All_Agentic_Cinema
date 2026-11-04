@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
@@ -29,6 +30,7 @@ from api.config import (
     gcs_configured,
     signed_url_ttl,
 )
+from api.db import database_backend, record_decision, reset_engine
 from api.export_service import apply_and_export
 from api.store import StoredRun, store
 from engine.models import Run, TraceStep
@@ -63,7 +65,13 @@ class CreateRunResponse(BaseModel):
     ttl_seconds: int = Field(default=900)
 
 
-app = FastAPI(title="CueCheck", version="0.1.0")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    reset_engine()
+    yield
+
+
+app = FastAPI(title="CueCheck", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -165,6 +173,7 @@ async def _run_pipeline(run_id: str, live: bool) -> None:
         stored.visual_events = pctx.visual_events
         stored.run = pctx.run
         stored.caption_ready = True
+        store.save(stored)
     except Exception as exc:
         stored.run.status = "failed"
         _publish(
@@ -181,6 +190,7 @@ async def _run_pipeline(run_id: str, live: bool) -> None:
                 "status": "failed",
             },
         )
+        store.save(stored)
 
 
 @app.get("/api/health")
@@ -191,6 +201,8 @@ def health() -> Dict[str, Any]:
         "gcs": gcs_configured(),
         "stt": os.environ.get("ENABLE_STT", "false").lower() == "true",
         "sample_clip": (SAMPLES_DIR / "clip.mp4").exists(),
+        "database": database_backend(),
+        "history_persisted": True,
     }
 
 
@@ -233,6 +245,7 @@ def create_run() -> CreateRunResponse:
         }
         stored.local_video = True
 
+    store.save(stored)
     return CreateRunResponse(
         id=run_id,
         gcs_configured=gcs_configured(),
@@ -274,6 +287,7 @@ async def upload_text_assets(
         stored.run.ad_uri = str(path)
         stored.run.has_ad = True
 
+    store.save(stored)
     return {"id": run_id, "caption_uri": stored.run.caption_uri, "ad_uri": stored.run.ad_uri}
 
 
@@ -296,6 +310,7 @@ def start_run(run_id: str, body: StartBody, background: BackgroundTasks) -> Dict
         raise HTTPException(status_code=400, detail="Captions have not been uploaded")
 
     live = gcs_configured() and bool(stored.run.media_uri and stored.run.media_uri.startswith("gs://"))
+    store.save(stored)
     background.add_task(_run_pipeline, run_id, live)
     return _serialize_run(stored)
 
@@ -368,6 +383,8 @@ def decide_fix(run_id: str, fix_id: str, body: FixDecisionBody) -> Dict[str, Any
         raise HTTPException(status_code=404, detail="Fix not found")
 
     target.status = "accepted" if body.decision == "accept" else "rejected"
+    record_decision(run_id, fix_id, body.decision)
+    store.save(stored)
     return _serialize_run(stored)
 
 

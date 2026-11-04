@@ -216,7 +216,11 @@ export default function App() {
         <div className="mx-auto max-w-4xl px-6 py-10">
           <h1 className="text-2xl font-semibold">History</h1>
           <p className="mt-2 text-sm text-bay-500">
-            In-memory for this process. Postgres arrives with the Replit handoff.
+            Runs persist in{" "}
+            <span className="tc text-bay-300">
+              {health?.database === "postgres" ? "Postgres" : "SQLite"}
+            </span>
+            . They survive a restart. Click a row to reopen the scorecard.
           </p>
           <div className="mt-6 overflow-hidden rounded-xl border border-bay-700">
             <table className="w-full text-left text-sm">
@@ -225,13 +229,14 @@ export default function App() {
                   <th className="px-4 py-3">When</th>
                   <th className="px-4 py-3">Profile</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Score</th>
                   <th className="px-4 py-3">Findings</th>
                 </tr>
               </thead>
               <tbody>
                 {history.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-bay-500">
+                    <td colSpan={5} className="px-4 py-8 text-center text-bay-500">
                       No runs yet. Load the sample to create the first one.
                     </td>
                   </tr>
@@ -243,8 +248,11 @@ export default function App() {
                     onClick={() => openHistory(row.id)}
                   >
                     <td className="tc px-4 py-3 text-xs">{formatStamp(row.created_at)}</td>
-                    <td className="px-4 py-3">{row.profile_id}</td>
+                    <td className="px-4 py-3">
+                      {row.profile_id === "kids" ? "Children's" : "Adult broadcast"}
+                    </td>
                     <td className="tc px-4 py-3 text-xs">{row.status}</td>
+                    <td className="tc px-4 py-3 text-xs uppercase">{row.overall || "—"}</td>
                     <td className="px-4 py-3">{row.finding_count}</td>
                   </tr>
                 ))}

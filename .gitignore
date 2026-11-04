@@ -25,6 +25,7 @@ wheels/
 .venv/
 venv/
 ENV/
+.vendor/
 
 # Testing & Linting
 .pytest_cache/
