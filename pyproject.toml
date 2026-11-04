@@ -3,13 +3,13 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cuecheck"
+name = "framekind"
 version = "0.1.0"
 description = "Accessibility QC agent for film and TV deliverables (captions, SDH, audio description)"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
-authors = [{ name = "CueCheck Team" }]
+authors = [{ name = "Kumar Abhinav" }]
 
 dependencies = [
     "pydantic>=2.5.0",

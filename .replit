@@ -6,7 +6,8 @@ channel = "stable-24_05"
 
 [deployment]
 run = ["bash", "scripts/replit_start.sh"]
-deploymentTarget = "autoscale"
+# Autoscale's documented target. In Publishing, set Max machines to 1.
+deploymentTarget = "cloudrun"
 build = ["bash", "scripts/replit_build.sh"]
 
 [[ports]]

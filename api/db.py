@@ -10,7 +10,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import Boolean, Integer, String, Text, create_engine, delete, select
+from sqlalchemy import Boolean, Integer, LargeBinary, String, Text, create_engine, delete, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -73,6 +73,16 @@ class QcDecision(Base):
     created_at: Mapped[str] = mapped_column(String(64))
 
 
+class QcAsset(Base):
+    """Small inline videos survive deployment restarts when Postgres is configured."""
+
+    __tablename__ = "qc_assets"
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(64), index=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+
+
 _engine: Optional[Engine] = None
 _Session: Optional[sessionmaker[Session]] = None
 
@@ -124,6 +134,15 @@ def reset_engine(url: Optional[str] = None) -> Engine:
     return _engine
 
 
+def dispose_engine() -> None:
+    """Release pooled connections. Safe to call when no engine exists."""
+    global _engine, _Session
+    if _engine is not None:
+        _engine.dispose()
+    _engine = None
+    _Session = None
+
+
 def get_session() -> Session:
     global _Session
     if _Session is None:
@@ -138,6 +157,10 @@ def dump_json(value: Any) -> str:
 
 def stored_payload(stored: Any) -> Dict[str, Any]:
     return {
+        # Kept in the existing JSON payload: old databases need no destructive
+        # migration. Legacy rows without an owner remain private and unclaimed.
+        "owner_id": stored.owner_id,
+        "upload_sizes": stored.upload_sizes,
         "run": stored.run.model_dump(),
         "cues": [c.model_dump() for c in stored.cues],
         "ad_cues": [c.model_dump() for c in stored.ad_cues],
@@ -175,10 +198,13 @@ def persist_run(stored: Any) -> None:
 
         session.execute(delete(QcFinding).where(QcFinding.run_id == run.id))
         session.execute(delete(QcFix).where(QcFix.run_id == run.id))
-        for finding in run.findings:
+        # These are projection rows, not the logical finding identity. Include
+        # the observation position so a repeated model timestamp / legacy ID
+        # cannot abort the entire run transaction. Logical IDs stay in payload.
+        for position, finding in enumerate(run.findings):
             session.add(
                 QcFinding(
-                    id=f"{run.id}:{finding.id}",
+                    id=f"{run.id}:finding:{position}",
                     run_id=run.id,
                     code=finding.code,
                     severity=finding.severity,
@@ -186,10 +212,10 @@ def persist_run(stored: Any) -> None:
                     payload=dump_json(finding.model_dump()),
                 )
             )
-        for fix in run.fixes:
+        for position, fix in enumerate(run.fixes):
             session.add(
                 QcFix(
-                    id=f"{run.id}:{fix.id}",
+                    id=f"{run.id}:fix:{position}",
                     run_id=run.id,
                     type=fix.type,
                     status=fix.status,
@@ -220,6 +246,24 @@ def load_payload(run_id: str) -> Optional[Dict[str, Any]]:
         return json.loads(row.payload)
 
 
+def save_asset(run_id: str, kind: str, content: bytes) -> None:
+    with get_session() as session:
+        asset_id = f"{run_id}:{kind}"
+        row = session.get(QcAsset, asset_id)
+        if row is None:
+            row = QcAsset(id=asset_id, run_id=run_id, kind=kind, content=content)
+            session.add(row)
+        else:
+            row.content = content
+        session.commit()
+
+
+def load_asset(run_id: str, kind: str) -> Optional[bytes]:
+    with get_session() as session:
+        row = session.get(QcAsset, f"{run_id}:{kind}")
+        return row.content if row else None
+
+
 def list_payloads() -> List[Dict[str, Any]]:
     with get_session() as session:
         rows = session.scalars(select(QcRun).order_by(QcRun.created_at.desc())).all()
@@ -230,6 +274,8 @@ def hydrate_stored(payload: Dict[str, Any], stored_cls: Any) -> Any:
     after = payload.get("after_scorecard")
     return stored_cls(
         run=Run.model_validate(payload["run"]),
+        owner_id=payload.get("owner_id", ""),
+        upload_sizes=payload.get("upload_sizes") or {},
         cues=[Cue.model_validate(c) for c in payload.get("cues", [])],
         ad_cues=[Cue.model_validate(c) for c in payload.get("ad_cues", [])],
         segments=[Segment.model_validate(s) for s in payload.get("segments", [])],
@@ -240,6 +286,23 @@ def hydrate_stored(payload: Dict[str, Any], stored_cls: Any) -> Any:
         local_video=bool(payload.get("local_video")),
         caption_ready=bool(payload.get("caption_ready")),
     )
+
+
+def decision_status_map(run_id: str) -> Dict[str, str]:
+    """Latest accept/reject per fix id. Later rows win."""
+    latest: Dict[str, str] = {}
+    for row in list_decisions(run_id):
+        latest[row["fix_id"]] = "accepted" if row["decision"] == "accept" else "rejected"
+    return latest
+
+
+def apply_decisions_to_run(run: Run) -> Run:
+    """Replay qc_decisions onto a Run so a pipeline overwrite cannot drop them."""
+    latest = decision_status_map(run.id)
+    for fx in run.fixes:
+        if fx.id in latest:
+            fx.status = latest[fx.id]
+    return run
 
 
 def list_decisions(run_id: str) -> List[Dict[str, Any]]:
@@ -260,6 +323,7 @@ def list_decisions(run_id: str) -> List[Dict[str, Any]]:
 
 def clear_all() -> None:
     with get_session() as session:
+        session.execute(delete(QcAsset))
         session.execute(delete(QcDecision))
         session.execute(delete(QcFinding))
         session.execute(delete(QcFix))

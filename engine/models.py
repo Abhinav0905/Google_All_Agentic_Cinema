@@ -70,6 +70,7 @@ class Finding(BaseModel):
     code: str
     severity: Literal["error", "warning", "info"]
     cue_index: Optional[int] = None
+    segment_index: Optional[int] = None  # Index into alignment.unmatched_segments, when applicable.
     start_ms: int
     end_ms: int
     message: str
@@ -153,6 +154,7 @@ class Run(BaseModel):
     id: str
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     profile_id: str
+    analysis_mode: Literal["live", "sample", "caption_only"] = "caption_only"
     sdh_mode: bool = True
     has_ad: bool = False
     media_uri: Optional[str] = None

@@ -2,4 +2,4 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 python -m pip install -e .
-(cd web && npm install && npm run build)
+(cd web && npm ci && npm run build)

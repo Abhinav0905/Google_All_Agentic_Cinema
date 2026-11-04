@@ -24,7 +24,7 @@ def generate_html_report(
 ) -> str:
     """Generate standalone HTML QC audit report."""
     template_str = TEMPLATE_PATH.read_text(encoding="utf-8")
-    template = Template(template_str)
+    template = Template(template_str, autoescape=True)
     sorted_findings = sorted(findings, key=lambda f: f.start_ms)
 
     timestamp = created_at or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")

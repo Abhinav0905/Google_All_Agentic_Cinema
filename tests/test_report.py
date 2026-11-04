@@ -53,10 +53,10 @@ def test_generate_html_report():
     )
 
     assert "<!DOCTYPE html>" in html
-    assert "CueCheck" in html
+    assert "FrameKind" in html
     assert "test-run-999" in html
-    assert "Adult Broadcast" in html
-    assert "Before / After Optimization Comparison" in html
+    assert "General reading (project preset)" in html
+    assert "Before / After Accepted Repairs" in html
     assert "Reading speed too high" in html
     assert "FIX_F1" or "FIX #" in html
 
@@ -81,3 +81,24 @@ def test_save_html_report(tmp_path: Path):
     )
     assert res_path.exists()
     assert "test-save-123" in res_path.read_text(encoding="utf-8")
+
+
+def test_caption_only_report_handles_unchecked_dimensions_and_escapes_evidence():
+    scorecard = Scorecard(readability=DimensionScore(score=1, threshold=0.95, status="pass"))
+    finding = Finding(
+        id="unsafe",
+        code="CPS",
+        severity="warning",
+        start_ms=0,
+        end_ms=1000,
+        message="<script>alert(1)</script>",
+        evidence="<img src=x onerror=alert(1)>",
+        spec_ref="Project threshold",
+    )
+    html = generate_html_report(
+        "caption-only", load_profile("adult"), scorecard, [finding], [], after_scorecard=scorecard
+    )
+    assert "Not checked" in html
+    assert "<script>alert" not in html
+    assert "<img src=x" not in html
+    assert "&lt;script&gt;" in html

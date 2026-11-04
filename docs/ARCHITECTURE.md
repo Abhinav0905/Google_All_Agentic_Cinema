@@ -1,8 +1,8 @@
-# CueCheck architecture
+# FrameKind architecture
 
-CueCheck is an accessibility QC bay for timed-text deliverables. A React SPA talks to a FastAPI process. That process runs an eight-step `google-adk` SequentialAgent. Deterministic work lives in `engine/`. Gemini on Vertex AI is used only for Transcribe, Listen, and Look.
+FrameKind is an accessibility QC bay for timed-text deliverables. A React SPA talks to a FastAPI process. That process runs an eight-step `google-adk` SequentialAgent. Deterministic work lives in `engine/`. Gemini on Vertex AI is used only for Transcribe, Listen, and Look.
 
-Video bytes never enter the app server. The browser uploads picture files to Cloud Storage with a signed PUT URL. Vertex reads the `gs://` URI. Caption and AD files are small text; they may be stored locally when GCS is not configured.
+With Vertex API-key authentication, the server accepts short video uploads and sends inline media to Gemini. With ADC and Cloud Storage configured, the browser can upload to GCS using a signed PUT URL and Vertex reads the `gs://` URI. Local media belongs to the anonymous browser session that created the run.
 
 ## How a run moves
 
@@ -71,7 +71,7 @@ flowchart LR
 | Step | Kind | Reads | Writes |
 |---|---|---|---|
 | Ingest | Deterministic | caption URI, AD URI, profile JSON | `Cue` lists |
-| Transcribe | Gemini Flash | `gs://` video or recorded fixture | `Segment` list |
+| Transcribe | Gemini Flash | `gs://` video or authored fixture | `Segment` list |
 | Listen | Gemini Flash | same media | `AudioEvent` list |
 | Look | Gemini Pro or Flash | media + segments | on-screen flags, `VisualEvent` list |
 | Rules | Deterministic | cues + profile | DUR/CPS/CPL/LINES/GAP/… findings |
@@ -89,8 +89,16 @@ Thresholds are never hardcoded in the engine. They come from `profiles/adult.jso
 - `web/` — New QC, Run (trace, scorecard, timeline, findings, drawer, export), History
 - `profiles/` — editable spec numbers
 - `samples/` — seeded defective captions and AD script used by **Load sample**
-- `tests/fixtures/` — recorded Gemini JSON so the sample runs offline
+- `tests/fixtures/` — authored sample JSON so the sample runs offline
 
-## Offline vs live
+## Analysis modes
 
-`Load sample` always runs offline against `tests/fixtures/`. Custom runs use Vertex only when `GOOGLE_CLOUD_PROJECT` and `GCS_BUCKET` are set and the picture URI is `gs://`. If a model call fails, that step is marked failed and the UI shows the error. There is no silent fallback to a fixture in a live run.
+- `sample`: authored transcript, sound and visual fixtures. No live model request.
+- `caption_only`: checks the uploaded timed text. Speech accuracy, sound coverage and visual coverage remain unassessed.
+- `live`: Gemini analyzes the uploaded media using Vertex API-key authentication or ADC. Model failures stop the run and appear in its trace.
+
+## Repair and session boundaries
+
+Original cues are preserved as a deep snapshot. Approved text and timing repairs compose; incompatible repairs produce a conflict instead of silently dropping an edit. Repeated exports rebuild from the source snapshot. The report escapes untrusted caption and evidence text.
+
+An HTTP-only anonymous session cookie scopes each run, upload, decision and export. This isolates browser sessions; it is not a user-account login or team collaboration system. Clearing the cookie removes access to that browser's earlier runs. SQLite works locally; configure Postgres for durable hosted history.

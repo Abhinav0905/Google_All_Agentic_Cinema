@@ -1,0 +1,111 @@
+{
+  "title": "The Briefing",
+  "duration_s": 60,
+  "visuals": "Original geometric illustration rendered with Pillow; no external media",
+  "audio": "Original synthesized phone and door effects; externally supplied synthetic voice tracks",
+  "fixture": "tests/fixtures/transcribe_fixture.json",
+  "fixture_status": "Authored review scenario, not measured model accuracy",
+  "phone_ms": 18500,
+  "door_ms": 56000,
+  "voice_tracks": [
+    {
+      "file": "segment_00.wav",
+      "start_ms": 2000,
+      "end_ms": 5000,
+      "original_duration_s": 3.094875,
+      "tempo_ratio": 1.031625
+    },
+    {
+      "file": "segment_01.wav",
+      "start_ms": 6000,
+      "end_ms": 7500,
+      "original_duration_s": 4.077292,
+      "tempo_ratio": 2.7181946666666668
+    },
+    {
+      "file": "segment_02.wav",
+      "start_ms": 8500,
+      "end_ms": 12000,
+      "original_duration_s": 3.957292,
+      "tempo_ratio": 1.1306548571428572
+    },
+    {
+      "file": "segment_03.wav",
+      "start_ms": 13000,
+      "end_ms": 14200,
+      "original_duration_s": 2.655542,
+      "tempo_ratio": 2.2129516666666667
+    },
+    {
+      "file": "segment_04.wav",
+      "start_ms": 15000,
+      "end_ms": 19500,
+      "original_duration_s": 4.781583,
+      "tempo_ratio": 1.0625740000000001
+    },
+    {
+      "file": "segment_05.wav",
+      "start_ms": 20500,
+      "end_ms": 24000,
+      "original_duration_s": 3.854042,
+      "tempo_ratio": 1.101154857142857
+    },
+    {
+      "file": "segment_06.wav",
+      "start_ms": 25000,
+      "end_ms": 26500,
+      "original_duration_s": 3.751,
+      "tempo_ratio": 2.5006666666666666
+    },
+    {
+      "file": "segment_07.wav",
+      "start_ms": 27500,
+      "end_ms": 29500,
+      "original_duration_s": 2.559917,
+      "tempo_ratio": 1.2799585
+    },
+    {
+      "file": "segment_08.wav",
+      "start_ms": 31000,
+      "end_ms": 34300,
+      "original_duration_s": 3.747708,
+      "tempo_ratio": 1.135669090909091
+    },
+    {
+      "file": "segment_09.wav",
+      "start_ms": 35500,
+      "end_ms": 38900,
+      "original_duration_s": 3.775167,
+      "tempo_ratio": 1.1103432352941178
+    },
+    {
+      "file": "segment_10.wav",
+      "start_ms": 40000,
+      "end_ms": 43300,
+      "original_duration_s": 3.942375,
+      "tempo_ratio": 1.194659090909091
+    },
+    {
+      "file": "segment_11.wav",
+      "start_ms": 44500,
+      "end_ms": 48300,
+      "original_duration_s": 4.134667,
+      "tempo_ratio": 1.088070263157895
+    },
+    {
+      "file": "segment_12.wav",
+      "start_ms": 52000,
+      "end_ms": 55000,
+      "original_duration_s": 2.47975,
+      "tempo_ratio": 0.8265833333333333
+    }
+  ],
+  "voice_source": {
+    "provider": "Google Cloud Text-to-Speech",
+    "voice_ids": {
+      "Alex": "en-US-Neural2-D",
+      "Sarah": "en-US-Neural2-F"
+    },
+    "official_reference": "https://docs.cloud.google.com/text-to-speech/docs/reference/rest/v1/text/synthesize"
+  }
+}

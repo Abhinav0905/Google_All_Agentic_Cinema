@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CueCheck QC Audit Report — {{ run_id }}</title>
+  <title>FrameKind QC Audit Report — {{ run_id }}</title>
   <style>
     :root {
       --bg-dark: #0f1117;
@@ -104,7 +104,7 @@
   <div class="container">
     <header>
       <div>
-        <h1><span class="brand">CueCheck</span> Quality Control Report</h1>
+        <h1><span class="brand">FrameKind</span> Quality Control Report</h1>
         <div class="meta">
           RUN ID: {{ run_id }} &bull; DATE: {{ created_at }} &bull; PROFILE: {{ profile.name }}
         </div>
@@ -116,120 +116,45 @@
       </div>
     </header>
 
+    <p>Scores use project review thresholds. They are not accessibility certification.
+      Unchecked dimensions have no audio/video evidence.</p>
+    {% set dimensions = [("accuracy", "Transcript agreement"), ("synchronicity", "Timing agreement"),
+      ("completeness", "Dialogue coverage"), ("readability", "Readability"),
+      ("sdh_coverage", "SDH coverage"), ("ad_coverage", "AD coverage")] %}
     {% if after_scorecard %}
     <section>
-      <h2>Before / After Optimization Comparison</h2>
+      <h2>Before / After Accepted Repairs</h2>
       <table class="compare-table">
-        <thead>
-          <tr>
-            <th>Accessibility Dimension</th>
-            <th>Original Score</th>
-            <th>After Accepted Fixes</th>
-            <th>Threshold</th>
-            <th>Resolution Impact</th>
-          </tr>
-        </thead>
+        <thead><tr><th>Dimension</th><th>Original</th><th>After accepted fixes</th><th>Project threshold</th><th>Change</th></tr></thead>
         <tbody>
-          <tr>
-            <td>Accuracy</td>
-            <td>{{ "%.1f"|format(scorecard.accuracy.score * 100) }}%</td>
-            <td class="diff-better">{{ "%.1f"|format(after_scorecard.accuracy.score * 100) }}%</td>
-            <td>{{ "%.0f"|format(scorecard.accuracy.threshold * 100) }}%</td>
-            <td>{{ "+" if after_scorecard.accuracy.score >= scorecard.accuracy.score else "" }}{{ "%.1f"|format((after_scorecard.accuracy.score - scorecard.accuracy.score) * 100) }}%</td>
+        {% for key, label in dimensions %}
+          {% set before = scorecard[key] %}{% set after = after_scorecard[key] %}
+          <tr><td>{{ label }}</td>
+          {% if before and after %}
+            <td>{{ "%.1f"|format(before.score * 100) }}%</td>
+            <td>{{ "%.1f"|format(after.score * 100) }}%</td>
+            <td>{{ "%.0f"|format(before.threshold * 100) }}%</td>
+            <td>{{ "%+.1f"|format((after.score - before.score) * 100) }} percentage points</td>
+          {% else %}<td colspan="4">Not checked</td>{% endif %}
           </tr>
-          <tr>
-            <td>Synchronicity</td>
-            <td>{{ "%.1f"|format(scorecard.synchronicity.score * 100) }}%</td>
-            <td class="diff-better">{{ "%.1f"|format(after_scorecard.synchronicity.score * 100) }}%</td>
-            <td>{{ "%.0f"|format(scorecard.synchronicity.threshold * 100) }}%</td>
-            <td>{{ "+" if after_scorecard.synchronicity.score >= scorecard.synchronicity.score else "" }}{{ "%.1f"|format((after_scorecard.synchronicity.score - scorecard.synchronicity.score) * 100) }}%</td>
-          </tr>
-          <tr>
-            <td>Completeness</td>
-            <td>{{ "%.1f"|format(scorecard.completeness.score * 100) }}%</td>
-            <td class="diff-better">{{ "%.1f"|format(after_scorecard.completeness.score * 100) }}%</td>
-            <td>{{ "%.0f"|format(scorecard.completeness.threshold * 100) }}%</td>
-            <td>{{ "+" if after_scorecard.completeness.score >= scorecard.completeness.score else "" }}{{ "%.1f"|format((after_scorecard.completeness.score - scorecard.completeness.score) * 100) }}%</td>
-          </tr>
-          <tr>
-            <td>Readability</td>
-            <td>{{ "%.1f"|format(scorecard.readability.score * 100) }}%</td>
-            <td class="diff-better">{{ "%.1f"|format(after_scorecard.readability.score * 100) }}%</td>
-            <td>{{ "%.0f"|format(scorecard.readability.threshold * 100) }}%</td>
-            <td>{{ "+" if after_scorecard.readability.score >= scorecard.readability.score else "" }}{{ "%.1f"|format((after_scorecard.readability.score - scorecard.readability.score) * 100) }}%</td>
-          </tr>
-          {% if scorecard.sdh_coverage and after_scorecard.sdh_coverage %}
-          <tr>
-            <td>SDH Coverage</td>
-            <td>{{ "%.1f"|format(scorecard.sdh_coverage.score * 100) }}%</td>
-            <td class="diff-better">{{ "%.1f"|format(after_scorecard.sdh_coverage.score * 100) }}%</td>
-            <td>{{ "%.0f"|format(scorecard.sdh_coverage.threshold * 100) }}%</td>
-            <td>{{ "+" if after_scorecard.sdh_coverage.score >= scorecard.sdh_coverage.score else "" }}{{ "%.1f"|format((after_scorecard.sdh_coverage.score - scorecard.sdh_coverage.score) * 100) }}%</td>
-          </tr>
-          {% endif %}
-          {% if scorecard.ad_coverage and after_scorecard.ad_coverage %}
-          <tr>
-            <td>AD Coverage</td>
-            <td>{{ "%.1f"|format(scorecard.ad_coverage.score * 100) }}%</td>
-            <td class="diff-better">{{ "%.1f"|format(after_scorecard.ad_coverage.score * 100) }}%</td>
-            <td>{{ "%.0f"|format(scorecard.ad_coverage.threshold * 100) }}%</td>
-            <td>{{ "+" if after_scorecard.ad_coverage.score >= scorecard.ad_coverage.score else "" }}{{ "%.1f"|format((after_scorecard.ad_coverage.score - scorecard.ad_coverage.score) * 100) }}%</td>
-          </tr>
-          {% endif %}
+        {% endfor %}
         </tbody>
       </table>
     </section>
     {% endif %}
-
     <section>
       <h2>Quality Scorecard</h2>
       <div class="scorecard-grid">
+      {% for key, label in dimensions %}
+        {% set dimension = scorecard[key] %}
         <div class="score-card">
-          <div class="score-title">Accuracy</div>
-          <div class="score-val" style="color: var(--{{ scorecard.accuracy.status }});">
-            {{ "%.1f"|format(scorecard.accuracy.score * 100) }}%
-          </div>
-          <div class="score-threshold">Spec: &ge;{{ "%.0f"|format(scorecard.accuracy.threshold * 100) }}%</div>
+          <div class="score-title">{{ label }}</div>
+          {% if dimension %}
+          <div class="score-val" style="color: var(--{{ dimension.status }});">{{ "%.1f"|format(dimension.score * 100) }}%</div>
+          <div class="score-threshold">Project threshold: &ge;{{ "%.0f"|format(dimension.threshold * 100) }}%</div>
+          {% else %}<div class="score-val">Not checked</div>{% endif %}
         </div>
-        <div class="score-card">
-          <div class="score-title">Synchronicity</div>
-          <div class="score-val" style="color: var(--{{ scorecard.synchronicity.status }});">
-            {{ "%.1f"|format(scorecard.synchronicity.score * 100) }}%
-          </div>
-          <div class="score-threshold">Spec: &ge;{{ "%.0f"|format(scorecard.synchronicity.threshold * 100) }}%</div>
-        </div>
-        <div class="score-card">
-          <div class="score-title">Completeness</div>
-          <div class="score-val" style="color: var(--{{ scorecard.completeness.status }});">
-            {{ "%.1f"|format(scorecard.completeness.score * 100) }}%
-          </div>
-          <div class="score-threshold">Spec: &ge;{{ "%.0f"|format(scorecard.completeness.threshold * 100) }}%</div>
-        </div>
-        <div class="score-card">
-          <div class="score-title">Readability</div>
-          <div class="score-val" style="color: var(--{{ scorecard.readability.status }});">
-            {{ "%.1f"|format(scorecard.readability.score * 100) }}%
-          </div>
-          <div class="score-threshold">Spec: &ge;{{ "%.0f"|format(scorecard.readability.threshold * 100) }}%</div>
-        </div>
-        {% if scorecard.sdh_coverage %}
-        <div class="score-card">
-          <div class="score-title">SDH Coverage</div>
-          <div class="score-val" style="color: var(--{{ scorecard.sdh_coverage.status }});">
-            {{ "%.1f"|format(scorecard.sdh_coverage.score * 100) }}%
-          </div>
-          <div class="score-threshold">Spec: &ge;{{ "%.0f"|format(scorecard.sdh_coverage.threshold * 100) }}%</div>
-        </div>
-        {% endif %}
-        {% if scorecard.ad_coverage %}
-        <div class="score-card">
-          <div class="score-title">AD Coverage</div>
-          <div class="score-val" style="color: var(--{{ scorecard.ad_coverage.status }});">
-            {{ "%.1f"|format(scorecard.ad_coverage.score * 100) }}%
-          </div>
-          <div class="score-threshold">Spec: &ge;{{ "%.0f"|format(scorecard.ad_coverage.threshold * 100) }}%</div>
-        </div>
-        {% endif %}
+      {% endfor %}
       </div>
     </section>
 
@@ -241,7 +166,7 @@
             <th class="col-time">Timecode</th>
             <th class="col-sev">Severity</th>
             <th class="col-code">Violation Code</th>
-            <th>Description, Evidence & Specification Reference</th>
+            <th>Description, Evidence & Project Rule</th>
           </tr>
         </thead>
         <tbody>
@@ -263,7 +188,7 @@
 
     {% if fixes %}
     <section>
-      <h2>Proposed Fixes ({{ fixes|length }} automated proposals)</h2>
+      <h2>Proposed Fixes ({{ fixes|length }} proposals)</h2>
       {% for fix in fixes %}
       <div class="fix-item">
         <div class="fix-header">

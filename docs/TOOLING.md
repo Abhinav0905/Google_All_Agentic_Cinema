@@ -1,125 +1,43 @@
-# Tooling
+# FrameKind tooling and deployment record
 
-CueCheck was built in two environments. The engine, agents, API, and QC bay were written in **Antigravity** (Gemini). Phase 6 — workspace, secrets, Postgres, History, and the public deployment — is the **Replit Agent** handoff.
+## Development attribution
 
-This file is the paste-ready brief for that handoff. After each Replit Agent session, drop a screenshot into `docs/screenshots/` and link it in the table at the bottom.
-
-## What each tool owns
-
-| Tool | What it built | Where to look |
+| Tool | Work | Evidence status |
 |---|---|---|
-| Antigravity (Gemini) | Caption/SDH/AD engine, ADK pipeline, FastAPI, React QC bay, offline sample | `engine/`, `agents/`, `api/` (except persistence), `web/`, `profiles/`, `samples/` |
-| Replit Agent | Workspace, secrets, Postgres persistence, History against the database, `replit.app` deploy | `.replit`, `replit.nix`, `scripts/replit_*.sh`, `api/db.py`, History screen |
-| Gemini CLI | Not used | — |
+| Google Antigravity | Initial engine, ADK pipeline, API and React app | Author-reported initial build |
+| Codex | FrameKind rename, interface redesign, security and export repairs, tests and deployment preparation | Repository changes and tests |
+| Replit Agent | Deployment verification task planned | Pending actual Agent session |
+| Gemini on Google Cloud Vertex | Live transcription, sound detection and visual analysis | Two complete local live media runs verified; see docs/SUBMISSION_READINESS.md |
 
-Google Cloud services called at runtime:
+The instant sample uses authored fixtures. It is not a recording of a live model response. Do not describe this project as developed exclusively with Google tools. The organizer's restriction on Codex assistance means contest eligibility cannot be asserted from this repository.
 
-- Vertex AI Gemini — `agents/multimodal.py`, `scripts/smoke_gcp.py`
-- Cloud Storage signed URLs — `engine/gcs.py`, `api/main.py`
-- Speech-to-Text v2 — optional, `ENABLE_STT=false` by default
+## Replit setup
 
-## Replit Agent tasks (run in this order)
+Import https://github.com/Abhinav0905/Google_All_Agentic_Cinema into Replit.
 
-Give Replit Agent one task at a time. Keep a screenshot of each session.
+- Build command: `bash scripts/replit_build.sh`
+- Run command: `bash scripts/replit_start.sh`
+- Python 3.11+, Node 20+, FFmpeg/FFprobe
+- Use a single serving process and a single deployment instance. Jobs, progress events and the current request limiter are process-local. For Autoscale, set Publishing > Adjust settings > Machine configuration > Max machines to 1.
+- Attach Replit Postgres for durable run history. Uploaded video, captions and AD files persist in the `qc_assets` table and restore after restart. Run history is in `qc_runs`; repairs and decisions have separate tables.
 
-### 1. Configure the workspace
+For the configured short-clip path, add `GOOGLE_SERVICE_ACCOUNT_JSON` and `GOOGLE_CLOUD_PROJECT` to Replit Secrets, with `GOOGLE_CLOUD_LOCATION=global`. Alternatively, add `VERTEX_API_KEY` where Google permits Vertex authorization keys. Credentials stay on the server. Inline video is capped at 14 MiB. Set the model IDs from `.env.example` and verify a real call before recording.
 
-```
-This repo is CueCheck. Configure the Replit workspace for Python 3.11 and Node 20.
+The optional GCS path requires ADC or `GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_CLOUD_PROJECT`, `GCS_BUCKET` and suitable bucket permissions. Apply bucket CORS for the deployed app origin if using signed browser PUT uploads. Never paste credentials into Agent chat or commit them.
 
-Use the files already in the repo:
-- .replit
-- replit.nix
-- scripts/replit_build.sh  (pip install -e . and npm run build in web/)
-- scripts/replit_start.sh  (serves FastAPI + web/dist on $PORT)
+## Bounded Replit Agent task
 
-Build command must produce web/dist. Run command must start:
-  python -m uvicorn api.main:app --host 0.0.0.0 --port $PORT
+Use this prompt after importing the final commit:
 
-Do not change the Python package layout. Do not add AI SDKs other than google-adk and google-genai.
-```
+> This is FrameKind, a FastAPI + React accessibility review app. Verify the imported repository builds and runs on Replit using scripts/replit_build.sh and scripts/replit_start.sh. Preserve the existing UI and Google-only runtime AI SDKs. Check Python, Node and FFmpeg availability, port binding and static asset serving. Attach Replit Postgres if available and verify that a sample run and its accepted repair survive a process restart for the same browser session. Fix any Replit-specific deployment issue you reproduce. Record the exact checks and files changed in docs/REPLIT_VERIFICATION.md. Do not expose secret values. Do not claim deployment success until the public URL works.
 
-### 2. Add secrets
+## Hosted acceptance checks
 
-```
-Copy every variable from .env.example into Replit Secrets.
+1. Open the public `.replit.app` URL in a new browser session.
+2. Click **Step into a sample review** and inspect a missing-sound finding.
+3. Accept one repair, export twice and compare downloads.
+4. Start a real short-video run; confirm all three model steps succeed.
+5. Reload history in the same session. Verify another browser session cannot open its run.
+6. Keep the app available through the end of judging, October 8, 2026, and check the event schedule again before shutting it down.
 
-Required for live Vertex / GCS:
-GOOGLE_CLOUD_PROJECT
-GOOGLE_CLOUD_LOCATION=us-central1
-GOOGLE_GENAI_USE_VERTEXAI=true
-GCS_BUCKET
-GEMINI_FLASH_MODEL=gemini-2.5-flash
-GEMINI_PRO_MODEL=gemini-2.5-pro
-GOOGLE_SERVICE_ACCOUNT_JSON   (full service-account JSON; the app writes it to a temp file on boot)
-
-Optional:
-ENABLE_STT=false
-SIGNED_URL_TTL_SECONDS=900
-APP_BASE_URL=https://<this-repl>.replit.app
-
-DATABASE_URL is set automatically when you attach Replit Postgres. Do not invent one.
-```
-
-### 3. Provision Postgres and persist QC objects
-
-```
-Attach Replit Postgres to this Repl. DATABASE_URL will be injected.
-
-SQLAlchemy models already exist in api/db.py:
-- qc_runs
-- qc_findings
-- qc_fixes
-- qc_decisions
-
-api/store.py already writes those tables. Confirm:
-- Load sample creates rows in qc_runs, qc_findings, qc_fixes
-- Accept / Reject a fix writes qc_decisions
-- Restarting the Repl still lists the run on History
-
-If the driver URL is postgres://, api/db.py rewrites it to postgresql+psycopg://.
-Do not replace the store with a new ORM. Do not add Redis.
-```
-
-### 4. History screen against Postgres
-
-```
-The History screen (web/src/App.jsx) already reads GET /api/runs.
-That list is backed by the database, not process memory.
-
-Confirm after a Repl restart:
-1. History still shows earlier runs
-2. Clicking a row opens the completed scorecard and findings
-3. The health line shows DATABASE POSTGRES
-
-If History is empty after restart, the store is not loading from qc_runs. Fix api/store.py get/list, not the React table.
-```
-
-### 5. Deploy
-
-```
-Deploy on Autoscale (or Reserved VM if SSE drops on Autoscale).
-
-Public URL must be https://*.replit.app.
-From a fresh browser, with no local files:
-1. Open the URL
-2. Click Load sample
-3. Wait for the eight-step trace to reach run.complete
-4. Open a finding, accept one fix, export SRT
-
-Keep this deployment live through 7 October.
-```
-
-## Local database (no Replit)
-
-If `DATABASE_URL` is unset, the API uses SQLite at `.data/cuecheck.sqlite`. History still survives a local uvicorn restart. Tests force an in-memory SQLite engine.
-
-## Screenshots
-
-| Session | File | Notes |
-|---|---|---|
-| 1 Workspace (Python 3.11 + Node, build/run) | `docs/screenshots/01-workspace.png` | Add after the Replit session |
-| 2 Secrets from `.env.example` | `docs/screenshots/02-secrets.png` | Redact key material |
-| 3 Postgres + persisted runs | `docs/screenshots/03-postgres.png` | Tables visible |
-| 4 History after restart | `docs/screenshots/04-history.png` | Same run id as session 3 |
-| 5 Public Load sample | `docs/screenshots/05-deploy.png` | `*.replit.app` in the address bar |
+Screenshots belong in `docs/screenshots/`; include only files that actually exist. Record no keys, personal account details or database passwords.

@@ -43,8 +43,8 @@ def levenshtein_distance(seq1: List[str], seq2: List[str]) -> int:
                 matrix[x][y] = matrix[x - 1][y - 1]
             else:
                 matrix[x][y] = min(
-                    matrix[x - 1][y] + 1,      # deletion
-                    matrix[x][y - 1] + 1,      # insertion
+                    matrix[x - 1][y] + 1,  # deletion
+                    matrix[x][y - 1] + 1,  # insertion
                     matrix[x - 1][y - 1] + 1,  # substitution
                 )
     return matrix[size_x - 1][size_y - 1]
@@ -187,13 +187,14 @@ def align_cues_to_segments(
     unmatched_segments = [
         seg for idx, seg in enumerate(segments) if idx not in matched_segment_indices
     ]
-    for seg in unmatched_segments:
+    for segment_index, seg in enumerate(unmatched_segments):
         # Only flag if spoken segment has meaningful content
         if len(normalize_tokens(seg.text)) >= 2:
             findings.append(
                 Finding(
-                    id=f"MISSING_DIALOGUE_seg_{seg.start_ms}",
+                    id=f"MISSING_DIALOGUE_seg_{seg.start_ms}_{segment_index}",
                     code="MISSING_DIALOGUE",
+                    segment_index=segment_index,
                     severity="error",
                     cue_index=None,
                     start_ms=seg.start_ms,

@@ -28,8 +28,15 @@ def test_fix_trim_respects_min_gap_and_min_duration(adult_profile):
     cue1 = Cue(index=1, start_ms=1000, end_ms=2500, lines=["One"], raw_text="One")
     cue2 = Cue(index=2, start_ms=2200, end_ms=4000, lines=["Two"], raw_text="Two")
     finding = Finding(
-        id="F1", code="OVERLAP", severity="error", cue_index=1,
-        start_ms=1000, end_ms=2500, message="overlap", evidence="", spec_ref="",
+        id="F1",
+        code="OVERLAP",
+        severity="error",
+        cue_index=1,
+        start_ms=1000,
+        end_ms=2500,
+        message="overlap",
+        evidence="",
+        spec_ref="",
     )
 
     fix = plan_fix_trim(finding, cue1, cue2, adult_profile)
@@ -47,8 +54,15 @@ def test_fix_extend_respects_gap_to_next(adult_profile):
     # Next cue starts at 3000ms (ample room to extend)
     cue2 = Cue(index=2, start_ms=3000, end_ms=5000, lines=["Next"], raw_text="Next")
     finding = Finding(
-        id="F2", code="DUR_MIN", severity="error", cue_index=1,
-        start_ms=1000, end_ms=1500, message="short", evidence="", spec_ref="",
+        id="F2",
+        code="DUR_MIN",
+        severity="error",
+        cue_index=1,
+        start_ms=1000,
+        end_ms=1500,
+        message="short",
+        evidence="",
+        spec_ref="",
     )
 
     fix = plan_fix_extend(finding, cue1, cue2, adult_profile)
@@ -64,8 +78,15 @@ def test_fix_rewrap(adult_profile):
     long_text = "This is a rather long sentence that should be wrapped into two lines."
     cue = Cue(index=1, start_ms=1000, end_ms=4000, lines=[long_text], raw_text=long_text)
     finding = Finding(
-        id="F3", code="CPL", severity="error", cue_index=1,
-        start_ms=1000, end_ms=4000, message="long", evidence="", spec_ref="",
+        id="F3",
+        code="CPL",
+        severity="error",
+        cue_index=1,
+        start_ms=1000,
+        end_ms=4000,
+        message="long",
+        evidence="",
+        spec_ref="",
     )
 
     fix = plan_fix_rewrap(finding, cue, adult_profile)
@@ -81,8 +102,15 @@ def test_fix_split_respects_min_durations(adult_profile):
     text = "Here is the first idea, and here is the second thought."
     cue = Cue(index=1, start_ms=1000, end_ms=5000, lines=[text], raw_text=text)
     finding = Finding(
-        id="F4", code="CPS", severity="error", cue_index=1,
-        start_ms=1000, end_ms=5000, message="cps", evidence="", spec_ref="",
+        id="F4",
+        code="CPS",
+        severity="error",
+        cue_index=1,
+        start_ms=1000,
+        end_ms=5000,
+        message="cps",
+        evidence="",
+        spec_ref="",
     )
 
     res = plan_fix_split(finding, cue, adult_profile)
@@ -95,12 +123,22 @@ def test_fix_split_respects_min_durations(adult_profile):
 
 def test_fix_normalize_tag():
     cue = Cue(
-        index=1, start_ms=1000, end_ms=3000,
-        lines=["(DOOR SLAMS)"], raw_text="(DOOR SLAMS)",
+        index=1,
+        start_ms=1000,
+        end_ms=3000,
+        lines=["(DOOR SLAMS)"],
+        raw_text="(DOOR SLAMS)",
     )
     finding = Finding(
-        id="F5", code="TAG_FORMAT", severity="info", cue_index=1,
-        start_ms=1000, end_ms=3000, message="tag", evidence="", spec_ref="",
+        id="F5",
+        code="TAG_FORMAT",
+        severity="info",
+        cue_index=1,
+        start_ms=1000,
+        end_ms=3000,
+        message="tag",
+        evidence="",
+        spec_ref="",
     )
 
     fix = plan_fix_normalize_tag(finding, cue)
@@ -118,8 +156,15 @@ def test_fix_prepend_speaker():
         raw_text="Is anyone there?",
     )
     finding = Finding(
-        id="F6", code="SDH_MISSING_SPEAKER_ID", severity="error", cue_index=1,
-        start_ms=1000, end_ms=3000, message="missing speaker", evidence="", spec_ref="",
+        id="F6",
+        code="SDH_MISSING_SPEAKER_ID",
+        severity="error",
+        cue_index=1,
+        start_ms=1000,
+        end_ms=3000,
+        message="missing speaker",
+        evidence="",
+        spec_ref="",
     )
 
     fix = plan_fix_prepend_speaker(finding, cue, "ALICE")
@@ -135,13 +180,23 @@ def test_fix_retime_ad(adult_profile):
     ]
     # AD cue currently at [2500, 4500] (overlapping dialogue)
     ad_cue = Cue(
-        index=1, start_ms=2500, end_ms=4500,
-        lines=["He checks the documents."], raw_text="He checks the documents.",
+        index=1,
+        start_ms=2500,
+        end_ms=4500,
+        lines=["He checks the documents."],
+        raw_text="He checks the documents.",
         kind="ad",
     )
     finding = Finding(
-        id="F7", code="AD_OVERLAPS_DIALOGUE", severity="error", cue_index=1,
-        start_ms=2500, end_ms=4500, message="overlap", evidence="", spec_ref="",
+        id="F7",
+        code="AD_OVERLAPS_DIALOGUE",
+        severity="error",
+        cue_index=1,
+        start_ms=2500,
+        end_ms=4500,
+        message="overlap",
+        evidence="",
+        spec_ref="",
     )
 
     fix = plan_fix_retime_ad(finding, ad_cue, segments, adult_profile)
@@ -263,3 +318,85 @@ def test_plan_fixes_links_fix_id(adult_profile):
     fixes = plan_fixes([finding], cues, adult_profile)
     assert len(fixes) == 1
     assert finding.fix_id == fixes[0].id
+
+
+def test_speaker_proposal_does_not_edit_original_or_rejected_export():
+    cue = Cue(index=1, start_ms=1000, end_ms=3000, lines=["Hello"], raw_text="Hello")
+    original = cue.model_dump()
+    finding = Finding(
+        id="speaker",
+        code="SDH_MISSING_SPEAKER_ID",
+        severity="warning",
+        start_ms=1000,
+        end_ms=3000,
+        message="missing",
+        evidence="",
+        spec_ref="",
+    )
+    fix = plan_fix_prepend_speaker(finding, cue, "Alice")
+    assert cue.model_dump() == original
+    assert fix.before.model_dump() == original
+    fix.status = "rejected"
+    exported, _ = apply_accepted_fixes([cue], [fix])
+    assert exported[0].model_dump() == original
+
+
+def test_accepted_text_and_timing_repairs_compose_in_either_order():
+    original = Cue(index=1, start_ms=1000, end_ms=3000, lines=["Hello"], raw_text="Hello")
+    timing = original.model_copy(deep=True, update={"end_ms": 4000})
+    text = original.model_copy(deep=True, update={"lines": ["Corrected"], "raw_text": "Corrected"})
+    fixes = [
+        Fix(id="timing", type="extend", before=original, after=timing, status="accepted"),
+        Fix(id="text", type="replace_text", before=original, after=text, status="accepted"),
+    ]
+    for order in (fixes, list(reversed(fixes))):
+        result, _ = apply_accepted_fixes([original], order)
+        assert result[0].end_ms == 4000
+        assert result[0].text == "Corrected"
+    assert original.end_ms == 3000
+    assert original.text == "Hello"
+
+
+def test_repeat_exports_preserve_proposals_and_media_timed_insertions():
+    from engine.export import export_cues
+
+    original = Cue(index=1, start_ms=2000, end_ms=3000, lines=["Hi"], raw_text="Hi")
+    shift = Fix(
+        id="shift",
+        type="global_shift",
+        before=original,
+        after=original.model_copy(update={"start_ms": 500}),
+        status="accepted",
+    )
+    tag = Cue(index=0, start_ms=5000, end_ms=6500, lines=["[KNOCK]"], raw_text="[KNOCK]")
+    insert = Fix(id="insert", type="insert_tag_cue", after=tag, status="accepted")
+    fixes = [shift, insert]
+    snapshot = [fix.model_dump() for fix in fixes]
+    first, _ = apply_accepted_fixes([original], fixes)
+    first_export = export_cues(first, "srt")
+    second, _ = apply_accepted_fixes([original], fixes)
+    assert export_cues(second, "srt") == first_export
+    assert [fix.model_dump() for fix in fixes] == snapshot
+    assert first[0].start_ms == 1500
+    assert next(c for c in first if c.text == "[KNOCK]").start_ms == 5000
+
+
+def test_conflicting_accepted_replacements_require_a_decision():
+    from engine.fixer import FixConflictError
+
+    cue = Cue(index=1, start_ms=1000, end_ms=3000, lines=["Hello"], raw_text="Hello")
+    fixes = [
+        Fix(
+            id=str(end),
+            type="extend",
+            before=cue,
+            after=cue.model_copy(update={"end_ms": end}),
+            status="accepted",
+        )
+        for end in (3500, 4000)
+    ]
+    with pytest.raises(FixConflictError, match="disagree on end_ms"):
+        apply_accepted_fixes([cue], fixes)
+    fixes[1].status = "rejected"
+    result, _ = apply_accepted_fixes([cue], fixes)
+    assert result[0].end_ms == 3500

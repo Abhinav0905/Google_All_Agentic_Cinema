@@ -15,7 +15,7 @@ def test_architecture_doc_has_mermaid_and_layers():
 
 def test_readme_leads_with_sample():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "Load sample" in text
+    assert "Step into a sample review" in text
     assert "uvicorn api.main:app" in text
     assert "docs/ARCHITECTURE.md" in text
     assert "docs/TOOLING.md" in text
@@ -26,6 +26,6 @@ def test_tooling_doc_covers_replit_agent():
     assert "Replit Agent" in text
     assert "Antigravity" in text
     assert "qc_runs" in text
-    assert "Load sample" in text
+    assert "Step into a sample review" in text
     assert (ROOT / ".replit").exists()
     assert (ROOT / "replit.nix").exists()

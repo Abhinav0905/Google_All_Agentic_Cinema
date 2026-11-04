@@ -23,9 +23,7 @@ from engine.models import (
 )
 
 
-def compute_dimension_status(
-    score: float, threshold: float
-) -> Literal["pass", "warn", "fail"]:
+def compute_dimension_status(score: float, threshold: float) -> Literal["pass", "warn", "fail"]:
     """Compute pass / warn / fail status against profile threshold with 0.05 warn band."""
     if score >= threshold:
         return "pass"
@@ -43,11 +41,10 @@ def compute_scorecard(
     visual_events: Optional[List[VisualEvent]] = None,
     ad_cues: Optional[List[Cue]] = None,
     sdh_mode: bool = True,
+    media_analyzed: bool = True,
 ) -> Scorecard:
     """Calculate overall and per-dimension scores against the spec profile."""
-    thresholds: Dict[str, float] = {
-        k: v.value for k, v in profile.pass_thresholds.items()
-    }
+    thresholds: Dict[str, float] = {k: v.value for k, v in profile.pass_thresholds.items()}
 
     # 1. Accuracy: 1 - mean WER over matched cues
     if alignment.matches:
@@ -181,8 +178,12 @@ def compute_scorecard(
             },
         )
 
+    # No audio/video analysis means these dimensions are unknown, not perfect.
+    if not media_analyzed:
+        accuracy_dim = sync_dim = comp_dim = sdh_dim = ad_dim = None
+
     # Compute overall status across all active dimensions
-    all_dims = [accuracy_dim, sync_dim, comp_dim, read_dim]
+    all_dims = [d for d in (accuracy_dim, sync_dim, comp_dim, read_dim) if d is not None]
     if sdh_dim:
         all_dims.append(sdh_dim)
     if ad_dim:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI runner for CueCheck QC pipeline on sample media deliverables.
+"""CLI runner for FrameKind QC pipeline on sample media deliverables.
 
 Executes the 8-step ADK pipeline, simulates fix application, produces
 before/after scorecard metrics, and exports an HTML audit report.
@@ -12,8 +12,8 @@ import argparse
 import asyncio
 from pathlib import Path
 
-from agents.pipeline import execute_pipeline
-from engine.alignment import align_cues_to_segments
+from agents.pipeline import PipelineContext, execute_pipeline_with_context
+from engine.alignment import AlignmentResult, align_cues_to_segments
 from engine.fixer import apply_accepted_fixes
 from engine.models import Finding, Fix, Run, Scorecard, TraceStep
 from engine.parsers import ms_to_srt_timecode
@@ -71,6 +71,9 @@ def print_scorecard_comparison(before: Scorecard, after: Scorecard) -> None:
         dims.append(("AD Coverage", before.ad_coverage, after.ad_coverage))
 
     for name, b_dim, a_dim in dims:
+        if b_dim is None or a_dim is None:
+            print(f"{name:<18} | Not checked")
+            continue
         b_pct = f"{b_dim.score * 100:.1f}%"
         a_pct = f"{a_dim.score * 100:.1f}%"
         diff = (a_dim.score - b_dim.score) * 100
@@ -78,57 +81,46 @@ def print_scorecard_comparison(before: Scorecard, after: Scorecard) -> None:
         print(f"{name:<18} | {b_pct:<8} | {a_pct:<8} | {a_dim.status.upper():<6} | {diff_str}")
 
     print("=" * 70)
-    print(
-        f"Overall Status: {before.overall_status.upper()} -> {after.overall_status.upper()}\n"
-    )
+    print(f"Overall Status: {before.overall_status.upper()} -> {after.overall_status.upper()}\n")
 
 
 def simulate_after_fixes(
-    run: Run, fixes: list[Fix], profile
+    pctx: PipelineContext, fixes: list[Fix], profile
 ) -> tuple[Scorecard, list[Finding]]:
-    """Simulate accepting all auto fixes, regenerate cues, and re-score."""
+    """Re-score accepted repairs against evidence from this exact pipeline run."""
+    run = pctx.run
     # Mark all automated fixes as accepted
     for fix in fixes:
         if fix.auto:
             fix.status = "accepted"
 
-    # Ingest original cues
-    from engine.parsers import parse_timed_text
+    cues, ad_cues = pctx.cues, pctx.ad_cues
+    segments = pctx.segments
+    audio_events, visual_events = pctx.audio_events, pctx.visual_events
+    media_analyzed = pctx.analysis_mode != "caption_only"
 
-    cues = parse_timed_text(run.caption_uri, kind="caption") if run.caption_uri else []
-    ad_cues = parse_timed_text(run.ad_uri, kind="ad") if (run.has_ad and run.ad_uri) else []
-
-    # Get median shift from alignment
-    from agents.multimodal import run_listen, run_look, run_transcribe
-    from agents.pipeline import FIXTURES_DIR
-
-    fixture_t = FIXTURES_DIR / "transcribe_fixture.json"
-    segments = run_transcribe(run.media_uri or "", offline_fixture=fixture_t)
-    audio_events = run_listen(
-        run.media_uri or "", offline_fixture=FIXTURES_DIR / "listen_fixture.json"
-    )
-    segments, visual_events = run_look(
-        run.media_uri or "", segments, offline_fixture=FIXTURES_DIR / "look_fixture.json"
-    )
-
-    orig_align = align_cues_to_segments(cues, segments, profile)
+    orig_align = pctx.alignment_result or AlignmentResult()
     median_shift = orig_align.median_offset_ms or 0
 
-    new_cues, new_ad = apply_accepted_fixes(
-        cues, fixes, ad_cues, median_shift_ms=median_shift
-    )
+    new_cues, new_ad = apply_accepted_fixes(cues, fixes, ad_cues, median_shift_ms=median_shift)
 
     # Re-evaluate
     caption_findings = run_caption_rules(new_cues, profile)
-    alignment = align_cues_to_segments(new_cues, segments, profile)
-    semantic_findings = run_semantic_rules(
-        profile=profile,
-        alignment=alignment,
-        audio_events=audio_events,
-        visual_events=visual_events,
-        captions=new_cues,
-        ad_cues=new_ad,
-        sdh_mode=run.sdh_mode,
+    alignment = (
+        align_cues_to_segments(new_cues, segments, profile) if media_analyzed else AlignmentResult()
+    )
+    semantic_findings = (
+        run_semantic_rules(
+            profile=profile,
+            alignment=alignment,
+            audio_events=audio_events,
+            visual_events=visual_events,
+            captions=new_cues,
+            ad_cues=new_ad,
+            sdh_mode=run.sdh_mode,
+        )
+        if media_analyzed
+        else []
     )
     all_findings = caption_findings + alignment.findings + semantic_findings
 
@@ -141,13 +133,16 @@ def simulate_after_fixes(
         visual_events=visual_events,
         ad_cues=new_ad,
         sdh_mode=run.sdh_mode,
+        media_analyzed=media_analyzed,
     )
 
     return after_scorecard, all_findings
 
 
 async def async_main() -> int:
-    parser = argparse.ArgumentParser(description="Run CueCheck QC pipeline on sample deliverables.")
+    parser = argparse.ArgumentParser(
+        description="Run FrameKind QC pipeline on sample deliverables."
+    )
     parser.add_argument("--live", action="store_true", help="Execute live Vertex AI model calls")
     parser.add_argument("--profile", default="adult", help="Profile ID (adult or kids)")
     parser.add_argument(
@@ -157,7 +152,7 @@ async def async_main() -> int:
         "--ad", default=str(SAMPLES_DIR / "ad_script.srt"), help="Path to Audio Description file"
     )
     parser.add_argument(
-        "--media", default="gs://cuecheck-media/sample_clip.mp4", help="GCS URI or path to video"
+        "--media", default=str(SAMPLES_DIR / "clip.mp4"), help="GCS URI or local path to video"
     )
     parser.add_argument("--no-sdh", action="store_true", help="Disable SDH checks")
     parser.add_argument("--no-ad", action="store_true", help="Disable AD checks")
@@ -183,8 +178,8 @@ async def async_main() -> int:
         dur_str = f"({step.duration_s}s)" if step.duration_s > 0 else ""
         print(f"[{step.step_name:<14}] {step.status.upper():<9} {step.summary} {dur_str}")
 
-    print("=== CueCheck QC SequentialAgent Pipeline ===")
-    await execute_pipeline(run, live=args.live, trace_callback=on_trace)
+    print("=== FrameKind QC SequentialAgent Pipeline ===")
+    pctx = await execute_pipeline_with_context(run, live=args.live, trace_callback=on_trace)
 
     print_findings_table(run.findings)
 
@@ -196,7 +191,7 @@ async def async_main() -> int:
         print(f"  Overall: {run.scorecard.overall_status}")
 
     # Calculate after scores
-    after_scorecard, _ = simulate_after_fixes(run, run.fixes, profile)
+    after_scorecard, _ = simulate_after_fixes(pctx, run.fixes, profile)
     if run.scorecard:
         print_scorecard_comparison(run.scorecard, after_scorecard)
 
@@ -222,4 +217,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(main())

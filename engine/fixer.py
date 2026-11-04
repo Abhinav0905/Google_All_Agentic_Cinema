@@ -26,16 +26,14 @@ def plan_fix_empty(finding: Finding, cue: Cue) -> Fix:
         id=f"FIX_{finding.id}",
         finding_ids=[finding.id],
         type="delete",
-        before=cue.model_copy(),
+        before=cue.model_copy(deep=True),
         after=None,  # None signifies deletion
         auto=True,
         status="proposed",
     )
 
 
-def plan_fix_trim(
-    finding: Finding, cue: Cue, next_cue: Cue, profile: Profile
-) -> Optional[Fix]:
+def plan_fix_trim(finding: Finding, cue: Cue, next_cue: Cue, profile: Profile) -> Optional[Fix]:
     """Trim cue.end_ms so that cue.end_ms <= next_cue.start_ms - min_gap_ms."""
     min_gap = profile.min_gap_ms.value
     min_dur = profile.min_duration_ms.value
@@ -43,13 +41,13 @@ def plan_fix_trim(
 
     # Must preserve min_duration
     if target_end - cue.start_ms >= min_dur:
-        after_cue = cue.model_copy()
+        after_cue = cue.model_copy(deep=True)
         after_cue.end_ms = target_end
         return Fix(
             id=f"FIX_{finding.id}",
             finding_ids=[finding.id],
             type="trim",
-            before=cue.model_copy(),
+            before=cue.model_copy(deep=True),
             after=after_cue,
             auto=True,
             status="proposed",
@@ -75,13 +73,13 @@ def plan_fix_extend(
     if finding.code == "DUR_MIN":
         needed_end = cue.start_ms + profile.min_duration_ms.value
         if needed_end <= max_allowed_end:
-            after_cue = cue.model_copy()
+            after_cue = cue.model_copy(deep=True)
             after_cue.end_ms = needed_end
             return Fix(
                 id=f"FIX_{finding.id}",
                 finding_ids=[finding.id],
                 type="extend",
-                before=cue.model_copy(),
+                before=cue.model_copy(deep=True),
                 after=after_cue,
                 auto=True,
                 status="proposed",
@@ -95,13 +93,13 @@ def plan_fix_extend(
         needed_end = cue.start_ms + int(round(needed_duration_s * 1000))
 
         if needed_end <= max_allowed_end:
-            after_cue = cue.model_copy()
+            after_cue = cue.model_copy(deep=True)
             after_cue.end_ms = needed_end
             return Fix(
                 id=f"FIX_{finding.id}",
                 finding_ids=[finding.id],
                 type="extend",
-                before=cue.model_copy(),
+                before=cue.model_copy(deep=True),
                 after=after_cue,
                 auto=True,
                 status="proposed",
@@ -139,23 +137,21 @@ def wrap_text_lines(text: str, max_lines: int, max_cpl: int) -> Optional[List[st
     return None
 
 
-def plan_fix_rewrap(
-    finding: Finding, cue: Cue, profile: Profile
-) -> Optional[Fix]:
+def plan_fix_rewrap(finding: Finding, cue: Cue, profile: Profile) -> Optional[Fix]:
     """Re-wrap text lines to satisfy max_lines and max_chars_per_line."""
     max_lines = profile.max_lines.value
     max_cpl = profile.max_chars_per_line.value
 
     wrapped = wrap_text_lines(cue.text, max_lines, max_cpl)
     if wrapped and wrapped != cue.lines:
-        after_cue = cue.model_copy()
+        after_cue = cue.model_copy(deep=True)
         after_cue.lines = wrapped
         after_cue.raw_text = "\n".join(wrapped)
         return Fix(
             id=f"FIX_{finding.id}",
             finding_ids=[finding.id],
             type="re-wrap",
-            before=cue.model_copy(),
+            before=cue.model_copy(deep=True),
             after=after_cue,
             auto=True,
             status="proposed",
@@ -163,9 +159,7 @@ def plan_fix_rewrap(
     return None
 
 
-def plan_fix_split(
-    finding: Finding, cue: Cue, profile: Profile
-) -> Optional[Tuple[Cue, Cue]]:
+def plan_fix_split(finding: Finding, cue: Cue, profile: Profile) -> Optional[Tuple[Cue, Cue]]:
     """Split cue into two parts proportionally at sentence or clause boundary."""
     min_dur = profile.min_duration_ms.value
     if cue.duration_ms < (min_dur * 2):
@@ -234,13 +228,13 @@ def plan_fix_global_shift(
         clustered = [m for m in alignment.matches if abs(m.offset_ms - median) <= 300]
         if len(clustered) / len(alignment.matches) >= 0.80:
             first_affected = min(clustered, key=lambda m: m.cue.start_ms).cue
-            after_cue = first_affected.model_copy()
+            after_cue = first_affected.model_copy(deep=True)
             after_cue.start_ms = median  # Store shift amount in metadata
             return Fix(
                 id="FIX_GLOBAL_SHIFT",
                 finding_ids=[f.id for f in alignment.findings if f.code == "SYNC_OFFSET"],
                 type="global_shift",
-                before=first_affected.model_copy(),
+                before=first_affected.model_copy(deep=True),
                 after=after_cue,
                 auto=True,
                 status="proposed",
@@ -255,13 +249,13 @@ def plan_fix_global_shift(
         clustered_out = [m for m in out_of_sync if abs(m.offset_ms - out_median) <= 300]
         if len(clustered_out) / len(out_of_sync) >= 0.80:
             first_affected = min(clustered_out, key=lambda m: m.cue.start_ms).cue
-            after_cue = first_affected.model_copy()
+            after_cue = first_affected.model_copy(deep=True)
             after_cue.start_ms = out_median  # Store shift amount in metadata
             return Fix(
                 id="FIX_GLOBAL_SHIFT",
                 finding_ids=[f.id for f in alignment.findings if f.code == "SYNC_OFFSET"],
                 type="global_shift",
-                before=first_affected.model_copy(),
+                before=first_affected.model_copy(deep=True),
                 after=after_cue,
                 auto=True,
                 status="proposed",
@@ -279,14 +273,14 @@ def plan_fix_normalize_tag(finding: Finding, cue: Cue) -> Optional[Fix]:
         new_text = new_text.strip() + " ♪"
 
     if new_text != text:
-        after_cue = cue.model_copy()
+        after_cue = cue.model_copy(deep=True)
         after_cue.lines = new_text.split("\n")
         after_cue.raw_text = new_text
         return Fix(
             id=f"FIX_{finding.id}",
             finding_ids=[finding.id],
             type="normalize_tag",
-            before=cue.model_copy(),
+            before=cue.model_copy(deep=True),
             after=after_cue,
             auto=True,
             status="proposed",
@@ -294,12 +288,10 @@ def plan_fix_normalize_tag(finding: Finding, cue: Cue) -> Optional[Fix]:
     return None
 
 
-def plan_fix_prepend_speaker(
-    finding: Finding, cue: Cue, speaker_label: str
-) -> Fix:
+def plan_fix_prepend_speaker(finding: Finding, cue: Cue, speaker_label: str) -> Fix:
     """Prepend speaker identification label to cue text."""
     label = speaker_label.upper()
-    after_cue = cue.model_copy()
+    after_cue = cue.model_copy(deep=True)
     if after_cue.lines:
         after_cue.lines[0] = f"{label}: {after_cue.lines[0]}"
     else:
@@ -310,16 +302,14 @@ def plan_fix_prepend_speaker(
         id=f"FIX_{finding.id}",
         finding_ids=[finding.id],
         type="prepend_speaker",
-        before=cue.model_copy(),
+        before=cue.model_copy(deep=True),
         after=after_cue,
         auto=True,
         status="proposed",
     )
 
 
-def plan_fix_insert_tag(
-    finding: Finding, t_ms: int, label: str
-) -> Fix:
+def plan_fix_insert_tag(finding: Finding, t_ms: int, label: str) -> Fix:
     """Insert a new bracketed SDH sound effect cue."""
     clean_label = label if label.startswith("[") else f"[{label}]"
     new_cue = Cue(
@@ -376,14 +366,14 @@ def plan_fix_retime_ad(
                 best_start = silence_start
 
     if best_start is not None:
-        after_ad = ad_cue.model_copy()
+        after_ad = ad_cue.model_copy(deep=True)
         after_ad.start_ms = best_start
         after_ad.end_ms = best_start + duration
         return Fix(
             id=f"FIX_{finding.id}",
             finding_ids=[finding.id],
             type="retime_ad",
-            before=ad_cue.model_copy(),
+            before=ad_cue.model_copy(deep=True),
             after=after_ad,
             auto=True,
             status="proposed",
@@ -394,8 +384,8 @@ def plan_fix_retime_ad(
         id=f"FIX_{finding.id}",
         finding_ids=[finding.id],
         type="manual",
-        before=ad_cue.model_copy(),
-        after=ad_cue.model_copy(),
+        before=ad_cue.model_copy(deep=True),
+        after=ad_cue.model_copy(deep=True),
         auto=False,
         status="proposed",
     )
@@ -456,7 +446,7 @@ def plan_fixes(
                             id=f"FIX_{f.id}",
                             finding_ids=[f.id],
                             type="split",
-                            before=cue.model_copy(),
+                            before=cue.model_copy(deep=True),
                             after=c1,
                             after_extra=c2,
                             auto=True,
@@ -469,8 +459,8 @@ def plan_fixes(
                             id=f"FIX_{f.id}",
                             finding_ids=[f.id],
                             type="manual",
-                            before=cue.model_copy(),
-                            after=cue.model_copy(),
+                            before=cue.model_copy(deep=True),
+                            after=cue.model_copy(deep=True),
                             auto=False,
                             status="proposed",
                         )
@@ -498,10 +488,19 @@ def plan_fixes(
             fixes.append(plan_fix_prepend_speaker(f, cue, speaker))
 
         elif f.code == "MISSING_DIALOGUE" and alignment:
-            unmatched = next(
-                (s for s in alignment.unmatched_segments if s.start_ms == f.start_ms),
-                None,
-            )
+            if f.segment_index is not None and 0 <= f.segment_index < len(
+                alignment.unmatched_segments
+            ):
+                unmatched = alignment.unmatched_segments[f.segment_index]
+            else:
+                unmatched = next(
+                    (
+                        s
+                        for s in alignment.unmatched_segments
+                        if s.start_ms == f.start_ms and s.end_ms == f.end_ms
+                    ),
+                    None,
+                )
             if unmatched:
                 min_dur = profile.min_duration_ms.value
                 end_ms = max(unmatched.end_ms, unmatched.start_ms + min_dur)
@@ -531,7 +530,7 @@ def plan_fixes(
                 None,
             )
             if pair:
-                after_cue = cue.model_copy()
+                after_cue = cue.model_copy(deep=True)
                 after_cue.lines = [pair.segment.text]
                 after_cue.raw_text = pair.segment.text
                 fixes.append(
@@ -539,7 +538,7 @@ def plan_fixes(
                         id=f"FIX_{f.id}",
                         finding_ids=[f.id],
                         type="replace_text",
-                        before=cue.model_copy(),
+                        before=cue.model_copy(deep=True),
                         after=after_cue,
                         auto=True,
                         status="proposed",
@@ -551,6 +550,27 @@ def plan_fixes(
             if ad_cue and alignment:
                 all_segs = [p.segment for p in alignment.matches] + alignment.unmatched_segments
                 fixes.append(plan_fix_retime_ad(f, ad_cue, all_segs, profile))
+
+    # Different observations can propose the exact same physical edit (e.g.
+    # multiple long lines needing one rewrap). Keep every finding and attach
+    # them to one decision, rather than duplicating the repair in the export.
+    canonical = {}
+    for fix in fixes:
+        signature = (
+            fix.type,
+            fix.auto,
+            fix.before.model_dump_json() if fix.before else None,
+            fix.after.model_dump_json() if fix.after else None,
+            fix.after_extra.model_dump_json() if fix.after_extra else None,
+        )
+        if signature not in canonical:
+            canonical[signature] = fix
+        else:
+            target = canonical[signature]
+            target.finding_ids.extend(
+                fid for fid in fix.finding_ids if fid not in target.finding_ids
+            )
+    fixes = list(canonical.values())
 
     # Link fix_id back onto findings
     fix_id_map = {}
@@ -565,84 +585,104 @@ def plan_fixes(
     return fixes
 
 
+class FixConflictError(ValueError):
+    """Accepted proposals change the same cue in incompatible ways."""
+
+
+def _repair_cue(cue: Cue, fixes: List[Fix]) -> List[Cue]:
+    if not fixes:
+        return [cue.model_copy(deep=True)]
+    structural = [f for f in fixes if f.type in ("delete", "split") or f.after is None]
+    if structural:
+        if len(fixes) != 1:
+            raise FixConflictError(
+                f"Cue {cue.index}: split/delete conflicts with another accepted repair. "
+                "Reject one proposal before exporting."
+            )
+        fix = structural[0]
+        return [c.model_copy(deep=True) for c in (fix.after, fix.after_extra) if c]
+
+    # Apply only the fields each proposal changed. A text edit and a timing edit
+    # then compose without restoring stale fields from their shared original.
+    changes = {}
+    for fix in fixes:
+        if not fix.before or not fix.after:
+            continue
+        before, after = fix.before, fix.after
+        proposed = {}
+        for field in ("start_ms", "end_ms"):
+            if getattr(before, field) != getattr(after, field):
+                proposed[field] = getattr(after, field)
+        if before.lines != after.lines or before.raw_text != after.raw_text:
+            proposed["text"] = (list(after.lines), after.raw_text)
+        for field, value in proposed.items():
+            if field in changes and changes[field] != value:
+                raise FixConflictError(
+                    f"Cue {cue.index}: accepted repairs disagree on {field}. "
+                    "Reject one proposal before exporting."
+                )
+            changes[field] = value
+    repaired = cue.model_copy(deep=True)
+    for field, value in changes.items():
+        if field == "text":
+            repaired.lines, repaired.raw_text = value
+        else:
+            setattr(repaired, field, value)
+    return [repaired]
+
+
 def apply_accepted_fixes(
     cues: List[Cue],
     fixes: List[Fix],
     ad_cues: Optional[List[Cue]] = None,
     median_shift_ms: int = 0,
 ) -> Tuple[List[Cue], List[Cue]]:
-    """Regenerate cues and AD scripts from the accepted set of fixes."""
+    """Apply accepted proposals without mutating inputs or silently losing edits."""
     accepted = [f for f in fixes if f.status == "accepted"]
-    if not accepted:
-        return list(cues), list(ad_cues or [])
+    global_fixes = [f for f in accepted if f.type == "global_shift"]
+    if len(global_fixes) > 1:
+        raise FixConflictError("Only one global timing shift can be accepted.")
+    global_fix = global_fixes[0] if global_fixes else None
 
-    new_cues: List[Cue] = []
-    has_global_shift = any(f.type == "global_shift" for f in accepted)
-    inserted_tags: List[Cue] = []
-
-    # Map cue replacements
-    cue_after_map: Dict[int, Optional[Cue]] = {}
+    by_cue: Dict[Tuple[str, int], List[Fix]] = {}
+    inserted: List[Cue] = []
     for fix in accepted:
         if fix.type == "global_shift":
             continue
-        if fix.type in ("insert_tag_cue", "insert_dialogue") and fix.after:
-            inserted_tags.append(fix.after)
-            if fix.after_extra:
-                inserted_tags.append(fix.after_extra)
-        elif fix.type == "split" and fix.before and fix.before.kind == "caption":
-            cue_after_map[fix.before.index] = fix.after
-            if fix.after_extra:
-                inserted_tags.append(fix.after_extra)
-        elif fix.before and fix.before.kind == "caption":
-            cue_after_map[fix.before.index] = fix.after
+        if fix.type in ("insert_tag_cue", "insert_dialogue"):
+            inserted.extend(c.model_copy(deep=True) for c in (fix.after, fix.after_extra) if c)
+        elif fix.before:
+            by_cue.setdefault((fix.before.kind, fix.before.index), []).append(fix)
 
-    for orig_cue in cues:
-        if orig_cue.index in cue_after_map:
-            replacement = cue_after_map[orig_cue.index]
-            if replacement is not None:
-                new_cues.append(replacement.model_copy())
-            # None means deleted
-        else:
-            new_cues.append(orig_cue.model_copy())
+    new_cues: List[Cue] = []
+    for cue in cues:
+        repaired = _repair_cue(cue, by_cue.get((cue.kind, cue.index), []))
+        if global_fix:
+            first_ms = global_fix.before.start_ms if global_fix.before else 0
+            shift = global_fix.after.start_ms if global_fix.after else median_shift_ms
+            if cue.start_ms >= first_ms:
+                for result in repaired:
+                    result.start_ms -= shift
+                    result.end_ms -= shift
+                    if result.start_ms < 0 or result.end_ms <= result.start_ms:
+                        raise FixConflictError(
+                            f"Cue {cue.index}: the accepted shift produces invalid timing."
+                        )
+        new_cues.extend(repaired)
 
-    new_cues.extend(inserted_tags)
+    # Insertions already use the media timeline (detected sound/dialogue time),
+    # so the original caption track's global offset must not shift them again.
+    new_cues.extend(inserted)
+    new_cues.sort(key=lambda c: (c.start_ms, c.end_ms, c.index))
+    for i, cue in enumerate(new_cues, start=1):
+        cue.index = i
 
-    # If global shift accepted, shift cues from first affected cue onward
-    global_fix = next((f for f in accepted if f.type == "global_shift"), None)
-    if global_fix and global_fix.before:
-        first_ms = global_fix.before.start_ms
-        shift = global_fix.after.start_ms if global_fix.after else median_shift_ms
-        for c in new_cues:
-            if c.start_ms >= first_ms:
-                c.start_ms -= shift
-                c.end_ms -= shift
-    elif has_global_shift and median_shift_ms != 0:
-        for c in new_cues:
-            c.start_ms -= median_shift_ms
-            c.end_ms -= median_shift_ms
-
-    # Sort and renumber
-    new_cues.sort(key=lambda c: c.start_ms)
-    for i, c in enumerate(new_cues, start=1):
-        c.index = i
-
-    # Process AD cues
-    new_ad: List[Cue] = []
-    ad_after_map: Dict[int, Optional[Cue]] = {
-        fix.before.index: fix.after
-        for fix in accepted
-        if fix.before and fix.before.kind == "ad"
-    }
-    for ad in (ad_cues or []):
-        if ad.index in ad_after_map:
-            repl = ad_after_map[ad.index]
-            if repl is not None:
-                new_ad.append(repl.model_copy())
-        else:
-            new_ad.append(ad.model_copy())
-
-    new_ad.sort(key=lambda c: c.start_ms)
-    for i, c in enumerate(new_ad, start=1):
-        c.index = i
-
+    new_ad = [
+        repaired
+        for cue in (ad_cues or [])
+        for repaired in _repair_cue(cue, by_cue.get((cue.kind, cue.index), []))
+    ]
+    new_ad.sort(key=lambda c: (c.start_ms, c.end_ms, c.index))
+    for i, cue in enumerate(new_ad, start=1):
+        cue.index = i
     return new_cues, new_ad

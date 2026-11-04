@@ -1,558 +1,260 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Check,
-  Download,
-  Pause,
-  Play,
-  X,
-} from "lucide-react";
+import { ArrowDownToLine, ArrowLeft, ArrowRight, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Film, ListChecks, LoaderCircle, Pause, Play, Volume2, VolumeX, X } from "lucide-react";
 import { msToRange, msToTimecode, seekSeconds } from "../timecode.js";
 import { api } from "../api.js";
-
-const STEPS = [
-  { id: "ingest", label: "Ingest" },
-  { id: "transcribe", label: "Transcribe" },
-  { id: "listen", label: "Listen" },
-  { id: "look", label: "Look" },
-  { id: "rules", label: "Rules" },
-  { id: "align", label: "Align" },
-  { id: "semantic", label: "Semantic" },
-  { id: "score_and_plan", label: "Score" },
-];
-
-const SEV = {
-  error: "bg-error/15 text-red-300",
-  warning: "bg-warn/15 text-amber-300",
-  info: "bg-info/20 text-slate-300",
-};
-
-const DIM_COPY = {
+const STEPS = [["ingest", "Read the files"], ["transcribe", "Map the dialogue"], ["listen", "Listen for sound"], ["look", "Look at the scene"], ["rules", "Check the captions"], ["align", "Compare the timing"], ["semantic", "Find missing context"], ["score_and_plan", "Prepare the review"]];
+const DIMENSIONS = {
   accuracy: "Accuracy",
-  synchronicity: "Synchronicity",
-  completeness: "Completeness",
+  synchronicity: "Timing",
+  completeness: "Dialogue",
   readability: "Readability",
-  sdh_coverage: "SDH coverage",
-  ad_coverage: "AD coverage",
+  sdh_coverage: "Sound & speakers",
+  ad_coverage: "Description"
 };
-
-function statusColor(status) {
-  if (status === "pass") return "text-pass";
-  if (status === "warn") return "text-warn";
-  if (status === "fail") return "text-error";
-  return "text-bay-500";
-}
-
-function stepRecord(run, id) {
-  return (run.steps || []).find((s) => s.step_name === id);
-}
-
-function Scorecard({ scorecard, running }) {
-  if (!scorecard && running) {
-    return (
-      <div>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-bay-500">
-          Scorecard
-        </h2>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-24 rounded-xl border border-bay-700">
-              <div className="skel h-full rounded-xl" />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
+const TITLES = {
+  SDH_MISSING_SFX: "A sound is missing",
+  SDH_MISSING_SPEAKER_ID: "Who's speaking?",
+  MISSING_DIALOGUE: "Dialogue without a caption",
+  ACCURACY_LOW: "The words don't match",
+  SYNC_OFFSET: "Caption timing is off",
+  EXTRA_CAPTION: "An unmatched caption",
+  AD_GAP: "A visual moment is missing",
+  AD_ONSCREEN_TEXT: "On-screen text needs context",
+  AD_OVERLAPS_DIALOGUE: "Description overlaps dialogue",
+  AD_READING_RATE: "Description needs more time",
+  EMPTY: "An empty caption",
+  ORDER: "Captions out of sequence",
+  DUR_MIN: "Gone too quickly",
+  DUR_MAX: "On screen too long",
+  CPS: "Too much to read",
+  CPL: "A line runs long",
+  LINES: "Too many lines",
+  OVERLAP: "Captions overlap",
+  GAP_MIN: "A little breathing room",
+  TAG_FORMAT: "Check the sound label"
+};
+const modeCopy = {
+  sample: {
+    label: "Sample review",
+    text: "Reference audio and visual annotations power this sample. The rule checks, decisions and exports run here; no live model analysis is claimed."
+  },
+  live: {
+    label: "Live media analysis",
+    text: "This review uses your media with the connected analysis service. Check each finding against the picture and sound before approving a change."
+  },
+  caption_only: {
+    label: "Caption-only review",
+    text: "Timing and readability checks are available. Audio, dialogue accuracy and visual coverage were not analyzed. Any uploaded video is available for playback."
   }
-  if (!scorecard) {
-    return (
-      <div className="rounded-xl border border-bay-700 bg-bay-850 p-6 text-sm text-bay-500">
-        No scorecard yet. Start a run or wait for scoring to finish.
-      </div>
-    );
-  }
-  const dims = [
-    "accuracy",
-    "synchronicity",
-    "completeness",
-    "readability",
-    "sdh_coverage",
-    "ad_coverage",
-  ];
-  return (
-    <div>
-      <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-bay-500">
-          Scorecard
-        </h2>
-        <span className={`tc text-xs font-semibold ${statusColor(scorecard.overall_status)}`}>
-          {scorecard.overall_status.toUpperCase()}
-        </span>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {dims.map((key) => {
-          const dim = scorecard[key];
-          if (!dim) return null;
-          return (
-            <div key={key} className="rounded-xl border border-bay-700 bg-bay-850 p-4">
-              <div className="text-xs uppercase tracking-wider text-bay-500">
-                {DIM_COPY[key]}
-              </div>
-              <div className={`tc mt-2 text-2xl font-semibold ${statusColor(dim.status)}`}>
-                {(dim.score * 100).toFixed(1)}%
-              </div>
-              <div className="tc mt-1 text-[11px] text-bay-500">
-                spec {(dim.threshold * 100).toFixed(0)}% · {dim.status}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+};
+const shortTime = ms => msToTimecode(ms).slice(3, 8);
+const percent = score => `${Math.round(score * 100)}%`;
+function QualityStrip({
+  scorecard,
+  after,
+  running
+}) {
+  return <section className="quality-section" aria-label="Quality scorecard">
+    <div className="quality-heading"><span className="eyebrow">QUALITY AT A GLANCE</span><span>{after ? "Original → approved edits" : running ? "Review in progress" : "Against the selected profile"}</span></div>
+    <div className="quality-strip">{Object.entries(DIMENSIONS).map(([key, label]) => {
+        const dim = scorecard?.[key];
+        const next = after?.[key];
+        return <div className="quality-dimension" key={key}><span>{label}</span><div className={`quality-number ${next?.status || dim?.status || "unknown"}`}>{dim ? <>{after && next ? <><span className="previous-score">{percent(dim.score)}</span><ArrowRight size={12} />{percent(next.score)}</> : percent(dim.score)}</> : running ? <span className="score-loading" /> : "—"}</div><small>{dim ? `Target ${percent(dim.threshold)}` : running ? "Checking" : "Not assessed"}</small></div>;
+      })}</div>
+  </section>;
 }
-
-function VideoBay({ run, selected, seekRef, videoFile }) {
+function VideoBay({
+  run,
+  selected,
+  seekRef,
+  videoFile,
+  onSelect
+}) {
   const videoRef = useRef(null);
   const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(false);
   const [now, setNow] = useState(0);
   const [mediaFailed, setMediaFailed] = useState(false);
-  const durationMs = useMemo(() => {
-    const last = Math.max(
-      60_000,
-      ...(run.findings || []).map((f) => f.end_ms || 0),
-      ...(run.cues || []).map((c) => c.end_ms || 0),
-    );
-    return last;
-  }, [run]);
-
-  const objectUrl = useMemo(
-    () => (videoFile ? URL.createObjectURL(videoFile) : null),
-    [videoFile],
-  );
-
-  const seekTo = (ms) => {
-    const t = seekSeconds(ms);
-    if (videoRef.current && videoRef.current.duration) {
-      videoRef.current.currentTime = t;
-    }
-    setNow(t * 1000);
-  };
-  if (seekRef) seekRef.current = seekTo;
-
+  const [mediaDuration, setMediaDuration] = useState(0);
+  const [showCaptions, setShowCaptions] = useState(true);
+  const objectUrl = useMemo(() => videoFile ? URL.createObjectURL(videoFile) : null, [videoFile]);
+  useEffect(() => () => {
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+  }, [objectUrl]);
+  const src = objectUrl || run.media_url;
   useEffect(() => {
-    if (!playing || (videoRef.current && videoRef.current.duration && !mediaFailed)) {
-      return undefined;
-    }
-    const timer = setInterval(() => {
-      setNow((prev) => (prev + 200 > durationMs ? 0 : prev + 200));
-    }, 200);
-    return () => clearInterval(timer);
-  }, [playing, durationMs, mediaFailed]);
-
-  const markers = run.findings || [];
-
-  return (
-    <div className="overflow-hidden rounded-xl border border-bay-700 bg-black">
-      <div className="relative aspect-video bg-[#07080c]">
-        {objectUrl || run.media_url ? (
-          <video
-            ref={videoRef}
-            className="h-full w-full object-contain"
-            src={objectUrl || run.media_url}
-            onTimeUpdate={(e) => setNow(e.currentTarget.currentTime * 1000)}
-            onPlay={() => setPlaying(true)}
-            onPause={() => setPlaying(false)}
-            onError={() => setMediaFailed(true)}
-          />
-        ) : null}
-        <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-4">
-          <div className="text-[11px] uppercase tracking-[0.2em] text-bay-500">Picture</div>
-          <div className="tc text-3xl font-medium text-white/90 drop-shadow">
-            {msToTimecode(now)}
-          </div>
-          {(mediaFailed || !objectUrl) && (
-            <div className="max-w-sm text-xs leading-5 text-bay-500">
-              No picture file in this run. Markers still seek the clock.
-              Drop an MP4 on New QC when you have one.
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="border-t border-bay-800 bg-bay-900 px-4 py-3">
-        <div className="relative h-8">
-          <div className="absolute inset-x-0 top-3 h-px bg-bay-700" />
-          {markers.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              title={f.code}
-              onClick={() => seekTo(f.start_ms)}
-              className={`absolute top-1.5 h-4 w-1.5 rounded-sm ${
-                f.severity === "error"
-                  ? "bg-error"
-                  : f.severity === "warning"
-                    ? "bg-warn"
-                    : "bg-slate-400"
-              } ${selected?.id === f.id ? "ring-2 ring-white" : ""}`}
-              style={{ left: `${Math.min(98, (f.start_ms / durationMs) * 100)}%` }}
-            />
-          ))}
-        </div>
-        <div className="mt-2 flex items-center justify-between text-xs text-bay-500">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 text-bay-300"
-            onClick={() => {
-              const el = videoRef.current;
-              if (el && el.duration && !mediaFailed) {
-                if (el.paused) el.play();
-                else el.pause();
-                return;
-              }
-              setPlaying((prev) => !prev);
-            }}
-          >
-            {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-            {playing ? "Pause" : "Play"}
-          </button>
-          <span className="tc">{msToTimecode(durationMs)}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FindingDrawer({ run, finding, onClose, onSeek, onDecide }) {
-  if (!finding) return null;
-  const cue = (run.cues || []).find((c) => c.index === finding.cue_index);
-  const fix = (run.fixes || []).find((f) => f.id === finding.fix_id);
-  return (
-    <aside className="flex h-full flex-col border-l border-bay-700 bg-bay-850">
-      <div className="flex items-center justify-between border-b border-bay-700 px-5 py-4">
-        <div>
-          <div className="tc text-xs text-accent">{finding.code}</div>
-          <button
-            type="button"
-            className="seek-link tc mt-1 text-sm"
-            onClick={() => onSeek(finding.start_ms)}
-          >
-            {msToTimecode(finding.start_ms)}
-          </button>
-        </div>
-        <button type="button" onClick={onClose} className="text-bay-500 hover:text-white">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 text-sm">
-        <p>{finding.message}</p>
-        {cue && (
-          <div>
-            <div className="mb-1 text-xs uppercase tracking-wider text-bay-500">Cue</div>
-            <pre className="whitespace-pre-wrap rounded-md bg-bay-900 p-3 text-bay-300">
-              {cue.text}
-            </pre>
-          </div>
-        )}
-        {finding.evidence && (
-          <div>
-            <div className="mb-1 text-xs uppercase tracking-wider text-bay-500">Evidence</div>
-            <p className="text-bay-300">{finding.evidence}</p>
-          </div>
-        )}
-        {finding.spec_ref && (
-          <div>
-            <div className="mb-1 text-xs uppercase tracking-wider text-bay-500">Spec</div>
-            <p className="text-accent/80">{finding.spec_ref}</p>
-          </div>
-        )}
-        {fix && (
-          <div>
-            <div className="mb-2 text-xs uppercase tracking-wider text-bay-500">
-              Proposed fix · {fix.type} · {fix.status}
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-md border border-error/20 bg-error/5 p-3">
-                <div className="mb-1 text-[11px] uppercase text-red-300">Before</div>
-                <div className="tc text-[11px] text-bay-500">
-                  {fix.before ? msToRange(fix.before.start_ms, fix.before.end_ms) : "—"}
-                </div>
-                <pre className="mt-2 whitespace-pre-wrap text-xs">
-                  {fix.before?.raw_text || fix.before?.lines?.join("\n") || "[insert]"}
-                </pre>
-              </div>
-              <div className="rounded-md border border-pass/20 bg-pass/5 p-3">
-                <div className="mb-1 text-[11px] uppercase text-emerald-300">After</div>
-                <div className="tc text-[11px] text-bay-500">
-                  {fix.after ? msToRange(fix.after.start_ms, fix.after.end_ms) : "[delete]"}
-                </div>
-                <pre className="mt-2 whitespace-pre-wrap text-xs">
-                  {fix.after?.raw_text || fix.after?.lines?.join("\n") || ""}
-                </pre>
-              </div>
-            </div>
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={() => onDecide(fix.id, "accept")}
-                className="inline-flex items-center gap-1 rounded-md bg-pass/20 px-3 py-1.5 text-xs font-semibold text-emerald-200"
-              >
-                <Check className="h-3.5 w-3.5" /> Accept
-              </button>
-              <button
-                type="button"
-                onClick={() => onDecide(fix.id, "reject")}
-                className="inline-flex items-center gap-1 rounded-md bg-error/20 px-3 py-1.5 text-xs font-semibold text-red-200"
-              >
-                <X className="h-3.5 w-3.5" /> Reject
-              </button>
-            </div>
-          </div>
-        )}
-        {!fix && (
-          <div className="rounded-md border border-bay-700 bg-bay-900 p-3 text-sm text-bay-500">
-            No automatic fix for this finding. It is reported only.
-          </div>
-        )}
-      </div>
-    </aside>
-  );
-}
-
-export default function RunView({ run, videoFile, onRunChange, onBack }) {
-  const [selectedId, setSelectedId] = useState(null);
-  const [codeFilter, setCodeFilter] = useState("all");
-  const [sevFilter, setSevFilter] = useState("all");
-  const [decideError, setDecideError] = useState("");
-  const seekRef = useRef(null);
-
-  const selected = (run.findings || []).find((f) => f.id === selectedId) || null;
-  const codes = [...new Set((run.findings || []).map((f) => f.code))].sort();
-  const findings = (run.findings || [])
-    .filter((f) => (codeFilter === "all" ? true : f.code === codeFilter))
-    .filter((f) => (sevFilter === "all" ? true : f.severity === sevFilter))
-    .sort((a, b) => a.start_ms - b.start_ms);
-
-  const seek = (ms) => {
-    seekRef.current?.(ms);
+    setMediaFailed(false);
+    setPlaying(false);
+    setNow(0);
+    setMediaDuration(0);
+  }, [src]);
+  const duration = mediaDuration || Math.max(1000, ...(run.findings || []).map(f => f.end_ms || 0), ...(run.cues || []).map(c => c.end_ms || 0));
+  const hasMedia = Boolean(src && !mediaFailed);
+  const seekTo = (ms, preRoll = true) => {
+    const seconds = preRoll ? seekSeconds(ms) : Math.max(0, ms / 1000);
+    if (videoRef.current && Number.isFinite(videoRef.current.duration)) videoRef.current.currentTime = Math.min(seconds, videoRef.current.duration);
+    setNow(seconds * 1000);
   };
-
-  const openFinding = (f) => {
+  seekRef.current = seekTo;
+  const cue = (run.cues || []).filter(item => item.start_ms <= now && item.end_ms > now);
+  const togglePlay = () => {
+    const el = videoRef.current;
+    if (!el || !hasMedia) return;
+    if (el.paused) el.play().catch(() => setPlaying(false));else el.pause();
+  };
+  return <section className="video-bay" aria-label="Video review player">
+    <div className="player-topline"><span><span className="tiny-square" /> PICTURE MONITOR</span><span>{videoFile?.name || (run.analysis_mode === "sample" ? "The Briefing" : "Review picture")}</span></div>
+    <div className="picture">
+      {hasMedia ? <video ref={videoRef} src={src} playsInline preload="metadata" muted={muted} onTimeUpdate={e => setNow(e.currentTarget.currentTime * 1000)} onLoadedMetadata={e => setMediaDuration(e.currentTarget.duration * 1000)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onError={() => setMediaFailed(true)} aria-label="Uploaded film" /> : <div className="picture-empty"><Film size={34} strokeWidth={1} /><h3>{mediaFailed ? "Picture unavailable" : "A review without picture"}</h3><p>{mediaFailed ? "The video couldn't be loaded. You can still review the caption findings below." : "This review has no saved video. Caption findings and exports are still available."}</p></div>}
+      {hasMedia && !playing && <button className="picture-play" onClick={togglePlay} aria-label="Play film"><Play size={25} fill="currentColor" /></button>}
+      {hasMedia && showCaptions && cue.length > 0 && <div className="caption-overlay">{cue.map(c => <span key={c.index}>{c.text || c.raw_text || c.lines?.join("\n")}</span>)}</div>}
+    </div>
+    <div className="player-controls"><button className="player-icon" onClick={togglePlay} disabled={!hasMedia} aria-label={playing ? "Pause film" : "Play film"}>{playing ? <Pause size={17} /> : <Play size={17} />}</button><span className="tc player-clock">{shortTime(now)} <span>/ {shortTime(duration)}</span></span><input className="playback-slider" type="range" aria-label="Video position" min="0" max={duration} value={Math.min(now, duration)} step="100" onChange={e => seekTo(Number(e.target.value), false)} disabled={!hasMedia} /><button className={`cc-button ${showCaptions ? "active" : ""}`} aria-label={showCaptions ? "Hide original captions" : "Show original captions"} aria-pressed={showCaptions} onClick={() => setShowCaptions(!showCaptions)}>CC</button><button className="player-icon" onClick={() => setMuted(!muted)} disabled={!hasMedia} aria-label={muted ? "Unmute film" : "Mute film"}>{muted ? <VolumeX size={17} /> : <Volume2 size={17} />}</button></div>
+    <div className="finding-timeline"><div className="timeline-label"><span>FINDINGS IN THE CUT</span><span>Click a marker to review</span></div><div className="timeline-track"><div className="track-line" />{(run.findings || []).map((f, i) => <button key={f.id} className={`timeline-marker ${f.severity} ${selected?.id === f.id ? "selected" : ""}`} style={{
+          left: `${Math.min(97, Math.max(1, f.start_ms / duration * 100))}%`,
+          top: `${8 + i % 2 * 13}px`
+        }} title={`${shortTime(f.start_ms)} · ${TITLES[f.code] || f.code}`} aria-label={`Review ${TITLES[f.code] || f.code} at ${shortTime(f.start_ms)}`} onClick={() => {
+          onSelect(f);
+          seekTo(f.start_ms);
+        }} />)}</div><div className="timeline-ticks"><span>00:00</span><span>{shortTime(duration / 3)}</span><span>{shortTime(duration * 2 / 3)}</span><span>{shortTime(duration)}</span></div></div>
+    <div className="player-footnote">Original captions in the player. Approved changes appear in your export.</div>
+  </section>;
+}
+function FindingDetail({
+  run,
+  finding,
+  onClose,
+  onSeek,
+  onDecide,
+  deciding
+}) {
+  if (!finding) return <div className="detail-empty"><CircleHelp size={24} strokeWidth={1.25} /><h3>Take a closer look.</h3><p>Select a finding to see the evidence and review a proposed correction.</p></div>;
+  const cue = (run.cues || []).find(c => c.index === finding.cue_index);
+  const fix = (run.fixes || []).find(f => f.id === finding.fix_id);
+  const beforeText = fix?.before?.raw_text || fix?.before?.lines?.join("\n");
+  const afterText = fix?.after?.raw_text || fix?.after?.lines?.join("\n");
+  return <section className="finding-detail" aria-label="Selected finding">
+    <div className="detail-heading"><div><span className={`severity-label ${finding.severity}`}>{finding.severity === "error" ? "Needs attention" : finding.severity === "warning" ? "Worth a look" : "For review"}</span><h3 tabIndex={-1}>{TITLES[finding.code] || finding.code.replaceAll("_", " ")}</h3></div><button className="icon-button" aria-label="Close finding details" onClick={onClose}><X size={18} /></button></div>
+    <button className="detail-time tc" onClick={() => onSeek(finding.start_ms)}><Play size={12} />{msToRange(finding.start_ms, finding.end_ms)}</button>
+    <p className="finding-explanation">{finding.message}</p>
+    {finding.evidence && <div className="evidence-block"><span className="eyebrow">{run.analysis_mode === "sample" ? "REFERENCE EVIDENCE" : "EVIDENCE"}</span><p>{finding.evidence}</p></div>}
+    {fix ? <><div className="correction-pair"><div className="correction before"><span className="eyebrow">ORIGINAL</span><p>{beforeText || (fix.before ? "Empty caption" : "New caption cue")}</p>{fix.before && <small className="tc">{msToRange(fix.before.start_ms, fix.before.end_ms)}</small>}</div><div className="correction after"><span className="eyebrow">PROPOSED EDIT</span><p>{afterText || (fix.after ? "Empty caption" : "Remove this caption")}</p>{fix.after && <small className="tc">{msToRange(fix.after.start_ms, fix.after.end_ms)}</small>}</div></div><div className="decision-actions"><button className={`button ${fix.status === "accepted" ? "accepted-button" : "primary"}`} disabled={Boolean(deciding) || fix.status === "accepted"} onClick={() => onDecide(fix.id, "accept")}>{deciding === `${fix.id}:accept` ? <LoaderCircle size={15} className="spin" /> : <Check size={16} />} {fix.status === "accepted" ? "Approved for export" : "Approve edit"}</button><button className="button secondary" disabled={Boolean(deciding) || fix.status === "rejected"} onClick={() => onDecide(fix.id, "reject")}>{fix.status === "rejected" ? <Check size={15} /> : <X size={15} />} {fix.status === "rejected" ? "Original kept" : "Keep original"}</button></div></> : <><div className="correction before"><span className="eyebrow">CURRENT CAPTION</span><p>{cue?.text || cue?.raw_text || cue?.lines?.join("\n") || "No caption at this moment"}</p></div><p className="manual-note">This finding needs an editorial decision. No automatic edit is proposed.</p></>}
+    {finding.spec_ref && <details className="spec-details"><summary>Rule reference <ChevronDown size={13} /></summary><p>{finding.spec_ref}</p><code>{finding.code}</code></details>}
+  </section>;
+}
+function Pipeline({
+  run
+}) {
+  const completed = (run.steps || []).filter(s => s.status === "completed").length;
+  return <details className="pipeline"><summary><span><ListChecks size={18} /> Behind the review <small>{completed} / {STEPS.length} steps</small></span><ChevronDown size={16} /></summary><p className="pipeline-note">{run.analysis_mode === "sample" ? "Sample annotations are prewritten references. The steps below show the actual local processing of that fixture." : "The processing record for this review. Expand a step to inspect its result."}</p><ol>{STEPS.map(([id, title], i) => {
+        const step = (run.steps || []).find(s => s.step_name === id);
+        return <li key={id}><details><summary><span className="step-index">{String(i + 1).padStart(2, "0")}</span><span>{title}</span><span className={`step-status ${step?.status || "pending"}`}>{step?.status === "running" && <LoaderCircle className="spin" size={11} />} {step?.status || "pending"}</span></summary><p>{step?.summary || "Waiting for this step."}{step?.duration_s ? ` (${step.duration_s}s)` : ""}</p></details></li>;
+      })}</ol></details>;
+}
+export default function RunView({
+  run,
+  videoFile,
+  onRunChange,
+  onBack
+}) {
+  const [selectedId, setSelectedId] = useState(null);
+  const [sevFilter, setSevFilter] = useState("all");
+  const [error, setError] = useState("");
+  const [deciding, setDeciding] = useState("");
+  const [exporting, setExporting] = useState("");
+  const [exported, setExported] = useState("");
+  const seekRef = useRef(null);
+  const sidebarRef = useRef(null);
+  useEffect(() => {
+    const sidebar = sidebarRef.current;
+    if (!sidebar) return;
+    if (!selectedId) {
+      sidebar.scrollTop = 0;
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      const detail = sidebar.querySelector(".finding-detail");
+      if (!detail) return;
+      detail.querySelector("h3")?.focus({
+        preventScroll: true
+      });
+      if (window.matchMedia("(min-width: 781px)").matches) {
+        sidebar.scrollTop += detail.getBoundingClientRect().top - sidebar.getBoundingClientRect().top - 8;
+      } else detail.scrollIntoView({
+        block: "start",
+        behavior: "auto"
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selectedId]);
+  const running = ["pending", "running"].includes(run.status);
+  const selected = (run.findings || []).find(f => f.id === selectedId) || null;
+  const allFindings = [...(run.findings || [])].sort((a, b) => a.start_ms - b.start_ms);
+  const findings = allFindings.filter(f => sevFilter === "all" || f.severity === sevFilter);
+  const accepted = (run.fixes || []).filter(f => f.status === "accepted").length;
+  const mode = modeCopy[run.analysis_mode] || {
+    label: "Review",
+    text: "Inspect the evidence and processing record before approving changes."
+  };
+  const seek = ms => seekRef.current?.(ms);
+  const select = f => {
     setSelectedId(f.id);
     seek(f.start_ms);
   };
-
   const decide = async (fixId, decision) => {
-    setDecideError("");
+    setError("");
+    setDeciding(`${fixId}:${decision}`);
+    setExported("");
     try {
-      const next = await api.decideFix(run.id, fixId, decision);
-      onRunChange(next);
+      onRunChange(await api.decideFix(run.id, fixId, decision));
     } catch (err) {
-      setDecideError(err.message || "Could not save that decision.");
+      setError(err.message || "Couldn't save that decision. Please try again.");
+    } finally {
+      setDeciding("");
     }
   };
-
-  return (
-    <div className="flex min-h-[calc(100vh-56px)]">
-      <aside className="w-64 shrink-0 border-r border-bay-800 bg-bay-900/60 p-4">
-        <button type="button" onClick={onBack} className="mb-4 text-xs text-bay-500 hover:text-white">
-          ← New QC
-        </button>
-        <div className="text-xs uppercase tracking-wider text-bay-500">Pipeline</div>
-        <ol className="mt-3 space-y-2">
-          {STEPS.map((step, idx) => {
-            const rec = stepRecord(run, step.id);
-            const status = rec?.status || (run.status === "pending" ? "pending" : "pending");
-            return (
-              <li key={step.id} className="rounded-lg border border-bay-800 bg-bay-850 px-3 py-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">
-                    <span className="tc mr-2 text-[11px] text-bay-500">{idx + 1}</span>
-                    {step.label}
-                  </span>
-                  <span
-                    className={`tc inline-flex items-center gap-1 text-[10px] ${
-                      status === "completed"
-                        ? "text-pass"
-                        : status === "running"
-                          ? "text-accent"
-                          : status === "failed"
-                            ? "text-error"
-                            : "text-bay-500"
-                    }`}
-                  >
-                    {status === "running" && <span className="pulse-dot" />}
-                    {status.toUpperCase()}
-                  </span>
-                </div>
-                {rec?.duration_s ? (
-                  <div className="tc mt-1 text-[10px] text-bay-500">{rec.duration_s}s</div>
-                ) : null}
-                {rec?.summary ? (
-                  <div className="mt-1 line-clamp-2 text-[11px] text-bay-500">{rec.summary}</div>
-                ) : (
-                  <div className="mt-1 text-[11px] text-bay-700">Waiting</div>
-                )}
-              </li>
-            );
-          })}
-        </ol>
-      </aside>
-
-      <main className="min-w-0 flex-1 overflow-y-auto p-6">
-        {run.status === "failed" && (
-          <div className="mb-4 rounded-lg border border-error/40 bg-error/10 px-4 py-3 text-sm text-red-200">
-            Pipeline failed. {(run.steps || []).find((s) => s.status === "failed")?.summary || "See the failed step in the rail."}
-          </div>
-        )}
-        {decideError && (
-          <div className="mb-4 rounded-lg border border-error/40 bg-error/10 px-4 py-3 text-sm text-red-200">
-            {decideError}
-          </div>
-        )}
-        {run.status === "running" && !run.scorecard && (
-          <div className="mb-4 rounded-lg border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-indigo-100">
-            Running the eight-step bay…
-          </div>
-        )}
-
-        <Scorecard scorecard={run.scorecard} running={run.status === "running"} />
-
-        <div className="mt-8">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-bay-500">
-            Timeline
-          </h2>
-          <VideoBay
-            run={run}
-            selected={selected}
-            videoFile={videoFile}
-            seekRef={seekRef}
-          />
-        </div>
-
-        <div className="mt-8">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-bay-500">
-              Findings
-            </h2>
-            <div className="flex gap-2">
-              <select
-                value={codeFilter}
-                onChange={(e) => setCodeFilter(e.target.value)}
-                className="rounded-md border border-bay-700 bg-bay-900 px-2 py-1 text-xs"
-              >
-                <option value="all">All codes</option>
-                {codes.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={sevFilter}
-                onChange={(e) => setSevFilter(e.target.value)}
-                className="rounded-md border border-bay-700 bg-bay-900 px-2 py-1 text-xs"
-              >
-                <option value="all">All severities</option>
-                <option value="error">Error</option>
-                <option value="warning">Warning</option>
-                <option value="info">Info</option>
-              </select>
-            </div>
-          </div>
-          <div className="overflow-hidden rounded-xl border border-bay-700">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-bay-900 text-[11px] uppercase tracking-wider text-bay-500">
-                <tr>
-                  <th className="px-4 py-3">Time</th>
-                  <th className="px-4 py-3">Sev</th>
-                  <th className="px-4 py-3">Code</th>
-                  <th className="px-4 py-3">Message</th>
-                </tr>
-              </thead>
-              <tbody>
-                {run.status === "completed" && findings.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-bay-500">
-                      No findings for this filter.
-                    </td>
-                  </tr>
-                )}
-                {run.status !== "completed" && (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-bay-500">
-                      Findings will list here when scoring finishes.
-                    </td>
-                  </tr>
-                )}
-                {findings.map((f) => (
-                  <tr
-                    key={f.id}
-                    onClick={() => openFinding(f)}
-                    className={`cursor-pointer border-t border-bay-800 hover:bg-bay-800/60 ${
-                      selectedId === f.id ? "bg-bay-800" : ""
-                    }`}
-                  >
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        className="seek-link tc text-xs"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openFinding(f);
-                        }}
-                      >
-                        {msToTimecode(f.start_ms)}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded px-2 py-0.5 text-[10px] uppercase ${SEV[f.severity]}`}>
-                        {f.severity}
-                      </span>
-                    </td>
-                    <td className="tc px-4 py-3 text-xs">{f.code}</td>
-                    <td className="px-4 py-3 text-bay-300">{f.message}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {run.status === "completed" && (
-          <div className="mt-8 rounded-xl border border-bay-700 bg-bay-850 p-5">
-            <div className="mb-3 text-sm font-semibold uppercase tracking-wider text-bay-500">
-              Apply and export
-            </div>
-            <p className="mb-4 text-sm text-bay-500">
-              Accepted fixes are written into the export. Proposed and rejected items stay as they were.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {["srt", "vtt", "json", "report"].map((fmt) => (
-                <a
-                  key={fmt}
-                  href={api.exportUrl(run.id, fmt)}
-                  className="inline-flex items-center gap-2 rounded-md border border-bay-700 px-3 py-2 text-xs font-semibold uppercase hover:border-accent/50"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  {fmt}
-                </a>
-              ))}
-            </div>
-          </div>
-        )}
-      </main>
-
-      {selected && (
-        <div className="w-[380px] shrink-0">
-          <FindingDrawer
-            run={run}
-            finding={selected}
-            onClose={() => setSelectedId(null)}
-            onSeek={seek}
-            onDecide={decide}
-          />
-        </div>
-      )}
-    </div>
-  );
+  const exportFile = async format => {
+    setError("");
+    setExporting(format);
+    try {
+      const res = await fetch(api.exportUrl(run.id, format));
+      if (!res.ok) {
+        const message = await res.json().catch(() => ({}));
+        throw new Error(message.detail || "The export could not be prepared.");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `framekind-${run.id.slice(0, 8)}.${format === "report" ? "html" : format}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      onRunChange(await api.getRun(run.id));
+      setExported(format.toUpperCase());
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setExporting("");
+    }
+  };
+  return <main id="main-content" className="review-page">
+    <div className="review-heading"><div><button className="back-link" onClick={onBack}><ArrowLeft size={14} /> Back to workspace</button><div className="review-title"><h1>{run.analysis_mode === "sample" ? "The Briefing" : "A closer look."}</h1><span className={`mode-badge ${run.analysis_mode || ""}`}><span />{mode.label}</span></div></div><div className="review-meta"><span>{run.profile_id === "kids" ? "Children's profile" : "Adult broadcast"}</span><small className="tc">REVIEW / {run.id.slice(0, 8).toUpperCase()}</small></div></div>
+    <div className={`review-notice ${running ? "is-running" : ""}`} role="status">{running ? <LoaderCircle size={16} className="spin" /> : <CircleHelp size={16} />}<span>{running ? `Review in progress. ${mode.text}` : mode.text}</span></div>
+    {run.status === "failed" && <div className="alert" role="alert">The review stopped. {(run.steps || []).find(s => s.status === "failed")?.summary || "Open the processing record for details."}</div>}
+    {error && <div className="alert" role="alert">{error}</div>}
+    <div className="review-grid"><div className="review-main"><VideoBay {...{
+          run,
+          selected,
+          seekRef,
+          videoFile
+        }} onSelect={select} /><QualityStrip scorecard={run.scorecard} after={run.after_scorecard} running={running} />
+      {run.status === "completed" && <section className="export-section"><div className="export-heading"><span className="export-icon"><CheckCheck size={23} /></span><div><h2>Your decisions. Ready to go.</h2><p>{accepted} {accepted === 1 ? "edit" : "edits"} approved. Only approved changes are applied.</p></div></div><div className="export-actions">{["srt", "vtt", "json", "report"].map(format => <button key={format} className={`button ${format === "srt" ? "primary" : "secondary"}`} disabled={Boolean(exporting) || Boolean(deciding)} onClick={() => exportFile(format)}>{exporting === format ? <LoaderCircle size={15} className="spin" /> : <ArrowDownToLine size={15} />} {format === "report" ? "Review report" : format.toUpperCase()}</button>)}</div>{exported && <p className="export-success" role="status"><Check size={14} />{exported} prepared. The score comparison reflects the approved edits.</p>}<p className="export-disclaimer">Scores support your review. They don't certify accessibility.</p></section>}
+      <Pipeline run={run} />
+    </div><aside ref={sidebarRef} className={`review-sidebar ${selectedId ? "has-selection" : ""}`} aria-label="Findings and corrections"><div className="findings-heading"><div><span className="eyebrow">THE REVIEW NOTES</span><h2>Worth a closer look. <span>{allFindings.length}</span></h2></div></div><div className="finding-filters" role="group" aria-label="Filter findings">{[["all", "All"], ["error", "Errors"], ["warning", "Warnings"], ["info", "Notes"]].map(([value, label]) => <button key={value} aria-pressed={sevFilter === value} className={sevFilter === value ? "active" : ""} onClick={() => setSevFilter(value)}>{label}{value === "all" ? ` ${allFindings.length}` : ""}</button>)}</div><div className="finding-list">{findings.length === 0 ? <div className="empty-findings">{running ? <><LoaderCircle size={20} className="spin" /><p>The review notes will arrive here.</p></> : <><Check size={20} /><p>No findings in this view.</p></>}</div> : findings.map(f => {
+            const fix = (run.fixes || []).find(x => x.id === f.fix_id);
+            return <button className={`finding-row ${selectedId === f.id ? "selected" : ""}`} key={f.id} onClick={() => select(f)}><span className={`finding-dot ${f.severity} ${fix?.status === "accepted" ? "resolved" : ""}`}>{fix?.status === "accepted" ? <Check size={10} /> : null}</span><span className="finding-row-copy"><strong>{TITLES[f.code] || f.code.replaceAll("_", " ")}</strong><span>{f.message}</span></span><span className="finding-row-time"><span className="tc">{shortTime(f.start_ms)}</span><ChevronRight size={14} /></span></button>;
+          })}</div><FindingDetail run={run} finding={selected} onClose={() => setSelectedId(null)} onSeek={seek} onDecide={decide} deciding={deciding} /></aside></div>
+  </main>;
 }

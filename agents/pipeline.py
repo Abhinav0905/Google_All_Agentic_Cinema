@@ -16,6 +16,7 @@ _run_async_impl() so `adk web` can drive the SequentialAgent from session state.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 from pathlib import Path
@@ -24,6 +25,8 @@ from typing import Any, AsyncGenerator, Callable, Dict, List, Optional
 from google.adk.agents import BaseAgent, SequentialAgent
 from google.adk.agents.invocation_context import InvocationContext
 from google.adk.events.event import Event
+from google.adk.events.event_actions import EventActions
+from google.genai import types
 
 from agents.multimodal import run_listen, run_look, run_transcribe
 from engine.alignment import AlignmentResult, align_cues_to_segments
@@ -54,6 +57,7 @@ def load_cues_from_uri(uri: str, kind: str = "caption"):
         return parse_timed_text(content, kind=kind)
     return parse_timed_text(uri, kind=kind)
 
+
 TraceCallback = Callable[[TraceStep, Run], None]
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -69,9 +73,21 @@ class PipelineContext:
         run: Run,
         live: bool = False,
         trace_callback: Optional[TraceCallback] = None,
+        analysis_mode: Optional[str] = None,
     ):
         self.run = run
-        self.live = live
+        sample_caption = str((SAMPLES_DIR / "captions_bad.srt").resolve())
+        is_sample = bool(
+            run.caption_uri
+            and not run.caption_uri.startswith("gs://")
+            and str(Path(run.caption_uri).resolve()) == sample_caption
+        )
+        mode = analysis_mode or ("live" if live else "sample" if is_sample else "caption_only")
+        if mode not in {"live", "sample", "caption_only"}:
+            raise ValueError(f"Unknown analysis mode: {mode}")
+        self.analysis_mode = mode
+        self.run.analysis_mode = mode
+        self.live = mode == "live"
         self.trace_callback = trace_callback
         self.profile: Optional[Profile] = None
         self.cues: List[Cue] = []
@@ -118,15 +134,14 @@ def serialize_pipeline(pctx: PipelineContext) -> Dict[str, Any]:
     return {
         "qc_run": pctx.run.model_dump(),
         "qc_live": pctx.live,
+        "qc_analysis_mode": pctx.analysis_mode,
         "qc_cues": [c.model_dump() for c in pctx.cues],
         "qc_ad_cues": [c.model_dump() for c in (pctx.ad_cues or [])],
         "qc_segments": [s.model_dump() for s in pctx.segments],
         "qc_audio_events": [e.model_dump() for e in pctx.audio_events],
         "qc_visual_events": [e.model_dump() for e in pctx.visual_events],
         "qc_caption_findings": [f.model_dump() for f in pctx.caption_findings],
-        "qc_alignment": (
-            pctx.alignment_result.model_dump() if pctx.alignment_result else None
-        ),
+        "qc_alignment": (pctx.alignment_result.model_dump() if pctx.alignment_result else None),
         "qc_semantic_findings": [f.model_dump() for f in pctx.semantic_findings],
     }
 
@@ -141,7 +156,10 @@ def restore_pipeline(
         return None
     run = Run.model_validate(raw_run)
     pctx = PipelineContext(
-        run, live=bool(state.get("qc_live", False)), trace_callback=trace_callback
+        run,
+        live=bool(state.get("qc_live", False)),
+        trace_callback=trace_callback,
+        analysis_mode=state.get("qc_analysis_mode"),
     )
     pctx.profile = load_profile(run.profile_id)
     pctx.cues = [Cue.model_validate(c) for c in state.get("qc_cues", [])]
@@ -200,14 +218,18 @@ class QcStepAgent(BaseAgent):
     async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
         pctx = context_from_invocation(ctx)
         try:
-            self.execute(pctx)
+            await asyncio.to_thread(self.execute, pctx)
+            if self.name == "score_and_plan":
+                pctx.run.status = "completed"
         except Exception as exc:
             ctx.session.state.update(serialize_pipeline(pctx))
             yield Event(
                 author=self.name,
                 invocation_id=ctx.invocation_id,
-                message=f"{self.name} failed: {exc}",
-                state=serialize_pipeline(pctx),
+                content=types.Content(
+                    role="model", parts=[types.Part(text=f"{self.name} failed: {exc}")]
+                ),
+                actions=EventActions(state_delta=serialize_pipeline(pctx)),
             )
             raise
 
@@ -218,13 +240,17 @@ class QcStepAgent(BaseAgent):
         yield Event(
             author=self.name,
             invocation_id=ctx.invocation_id,
-            message=f"[{self.name}] {summary}",
-            state=delta,
+            content=types.Content(
+                role="model", parts=[types.Part(text=f"[{self.name}] {summary}")]
+            ),
+            actions=EventActions(state_delta=delta),
         )
 
     async def _run_impl(self, *, ctx: Any, node_input: Any) -> AsyncGenerator[Any, None]:
         pctx: PipelineContext = node_input
-        self.execute(pctx)
+        await asyncio.to_thread(self.execute, pctx)
+        if self.name == "score_and_plan":
+            pctx.run.status = "completed"
         yield Event(author=self.name, output=pctx)
 
 
@@ -237,17 +263,25 @@ class IngestAgent(QcStepAgent):
         pctx.emit_trace(self.name, "running", summary="Parsing files and validating media...")
         try:
             pctx.profile = load_profile(pctx.run.profile_id)
+            if pctx.live and (
+                not (os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("VERTEX_API_KEY"))
+                or not pctx.run.media_uri
+            ):
+                raise ValueError(
+                    "Live analysis requires a Google Cloud project and uploaded media."
+                )
 
             if pctx.run.caption_uri:
                 pctx.cues = load_cues_from_uri(pctx.run.caption_uri, kind="caption")
+            if not pctx.cues:
+                raise ValueError("Caption file contains no readable cues.")
 
             if pctx.run.has_ad and pctx.run.ad_uri:
                 pctx.ad_cues = load_cues_from_uri(pctx.run.ad_uri, kind="ad")
 
             dur = time.time() - start
-            summary = (
-                f"Loaded profile '{pctx.profile.name}', parsed {len(pctx.cues)} captions"
-                + (f" and {len(pctx.ad_cues)} AD cues" if pctx.ad_cues else "")
+            summary = f"Loaded profile '{pctx.profile.name}', parsed {len(pctx.cues)} captions" + (
+                f" and {len(pctx.ad_cues)} AD cues" if pctx.ad_cues else ""
             )
             pctx.emit_trace(self.name, "completed", duration_s=dur, summary=summary)
         except Exception as e:
@@ -261,10 +295,15 @@ class TranscribeAgent(QcStepAgent):
     description: str = "Multimodal speech transcription using Gemini Flash"
 
     def execute(self, pctx: PipelineContext) -> None:
+        if pctx.analysis_mode == "caption_only":
+            pctx.emit_trace(
+                self.name, "completed", summary="Skipped: no media analysis in caption-only mode"
+            )
+            return
         start = time.time()
         pctx.emit_trace(self.name, "running", summary="Transcribing spoken dialogue...")
         try:
-            can_live = pctx.live and os.environ.get("GOOGLE_CLOUD_PROJECT")
+            can_live = pctx.live
             fixture = (FIXTURES_DIR / "transcribe_fixture.json") if not can_live else None
             media_uri = pctx.run.media_uri or "gs://cuecheck-media/sample.mp4"
 
@@ -283,10 +322,15 @@ class ListenAgent(QcStepAgent):
     description: str = "Multimodal non-speech audio event detection using Gemini Flash"
 
     def execute(self, pctx: PipelineContext) -> None:
+        if pctx.analysis_mode == "caption_only":
+            pctx.emit_trace(
+                self.name, "completed", summary="Skipped: no media analysis in caption-only mode"
+            )
+            return
         start = time.time()
         pctx.emit_trace(self.name, "running", summary="Listening for Foley and sound effects...")
         try:
-            can_live = pctx.live and os.environ.get("GOOGLE_CLOUD_PROJECT")
+            can_live = pctx.live
             fixture = (FIXTURES_DIR / "listen_fixture.json") if not can_live else None
             media_uri = pctx.run.media_uri or "gs://cuecheck-media/sample.mp4"
 
@@ -305,10 +349,15 @@ class LookAgent(QcStepAgent):
     description: str = "Multimodal visual pass for speaker visibility and visual events"
 
     def execute(self, pctx: PipelineContext) -> None:
+        if pctx.analysis_mode == "caption_only":
+            pctx.emit_trace(
+                self.name, "completed", summary="Skipped: no media analysis in caption-only mode"
+            )
+            return
         start = time.time()
         pctx.emit_trace(self.name, "running", summary="Analyzing speaker visibility & visuals...")
         try:
-            can_live = pctx.live and os.environ.get("GOOGLE_CLOUD_PROJECT")
+            can_live = pctx.live
             fixture = (FIXTURES_DIR / "look_fixture.json") if not can_live else None
             media_uri = pctx.run.media_uri or "gs://cuecheck-media/sample.mp4"
 
@@ -351,6 +400,12 @@ class AlignAgent(QcStepAgent):
     description: str = "Align captions to speech segments and detect sync/accuracy defects"
 
     def execute(self, pctx: PipelineContext) -> None:
+        if pctx.analysis_mode == "caption_only":
+            pctx.alignment_result = AlignmentResult()
+            pctx.emit_trace(
+                self.name, "completed", summary="Skipped: audio/video evidence unavailable"
+            )
+            return
         start = time.time()
         pctx.emit_trace(self.name, "running", summary="Aligning captions with transcript...")
         try:
@@ -377,6 +432,12 @@ class SemanticAgent(QcStepAgent):
     description: str = "Evaluate SDH and Audio Description semantic accessibility rules"
 
     def execute(self, pctx: PipelineContext) -> None:
+        if pctx.analysis_mode == "caption_only":
+            pctx.semantic_findings = []
+            pctx.emit_trace(
+                self.name, "completed", summary="Skipped: audio/video evidence unavailable"
+            )
+            return
         start = time.time()
         pctx.emit_trace(self.name, "running", summary="Auditing SDH and AD rules...")
         try:
@@ -400,7 +461,7 @@ class SemanticAgent(QcStepAgent):
 
 class ScoreAndPlanAgent(QcStepAgent):
     name: str = "score_and_plan"
-    description: str = "Calculate FCC/streaming scorecard and plan deterministic fixes"
+    description: str = "Calculate project-threshold scorecard and plan deterministic fixes"
 
     def execute(self, pctx: PipelineContext) -> None:
         start = time.time()
@@ -422,6 +483,7 @@ class ScoreAndPlanAgent(QcStepAgent):
                 visual_events=pctx.visual_events,
                 ad_cues=pctx.ad_cues,
                 sdh_mode=pctx.run.sdh_mode,
+                media_analyzed=pctx.analysis_mode != "caption_only",
             )
             pctx.run.scorecard = scorecard
 
@@ -436,7 +498,6 @@ class ScoreAndPlanAgent(QcStepAgent):
             pctx.run.exports["srt"] = export_cues(pctx.cues, "srt")
             pctx.run.exports["vtt"] = export_cues(pctx.cues, "vtt")
 
-            pctx.run.status = "completed"
             dur = time.time() - start
             summary = (
                 f"Scorecard: {scorecard.overall_status.upper()} | "
@@ -445,7 +506,6 @@ class ScoreAndPlanAgent(QcStepAgent):
             pctx.emit_trace(self.name, "completed", duration_s=dur, summary=summary)
         except Exception as e:
             dur = time.time() - start
-            pctx.run.status = "failed"
             pctx.emit_trace(self.name, "failed", duration_s=dur, summary=str(e), error=str(e))
             raise
 
@@ -472,15 +532,28 @@ async def execute_pipeline_with_context(
     run: Run,
     live: bool = False,
     trace_callback: Optional[TraceCallback] = None,
+    analysis_mode: Optional[str] = None,
 ) -> PipelineContext:
     """Execute the 8-step pipeline and return the in-memory context."""
-    pctx = PipelineContext(run, live=live, trace_callback=trace_callback)
+    loop = asyncio.get_running_loop()
+
+    def publish_trace(step: TraceStep, current_run: Run) -> None:
+        if trace_callback:
+            # Model steps run in a worker; asyncio queues and UI events stay on
+            # their owning event loop. Snapshots prevent later step mutations.
+            loop.call_soon_threadsafe(
+                trace_callback, step.model_copy(deep=True), current_run.model_copy(deep=True)
+            )
+
+    pctx = PipelineContext(
+        run, live=live, trace_callback=publish_trace, analysis_mode=analysis_mode
+    )
     pipeline_agent = create_qc_sequential_agent()
 
     try:
         run.status = "running"
         for agent in pipeline_agent.sub_agents:
-            agent.execute(pctx)
+            await asyncio.to_thread(agent.execute, pctx)
         run.status = "completed"
         if trace_callback:
             trace_callback(
@@ -513,9 +586,10 @@ async def execute_pipeline(
     run: Run,
     live: bool = False,
     trace_callback: Optional[TraceCallback] = None,
+    analysis_mode: Optional[str] = None,
 ) -> Run:
     """Execute the complete 8-step ADK pipeline on a Run instance."""
     pctx = await execute_pipeline_with_context(
-        run, live=live, trace_callback=trace_callback
+        run, live=live, trace_callback=trace_callback, analysis_mode=analysis_mode
     )
     return pctx.run
