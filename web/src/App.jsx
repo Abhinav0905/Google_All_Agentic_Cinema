@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Clapperboard } from "lucide-react";
 import { api } from "./api.js";
+import { formatStamp } from "./timecode.js";
 import NewQc from "./components/NewQc.jsx";
 import RunView from "./components/RunView.jsx";
 
@@ -37,12 +38,22 @@ export default function App() {
   const [hasAd, setHasAd] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [apiDown, setApiDown] = useState(false);
   const sourceRef = useRef(null);
 
   const refreshHistory = () => api.listRuns().then(setHistory).catch(() => {});
 
   useEffect(() => {
-    api.health().then(setHealth).catch(() => setHealth({ vertex: false, gcs: false }));
+    api
+      .health()
+      .then((h) => {
+        setHealth(h);
+        setApiDown(false);
+      })
+      .catch(() => {
+        setHealth({ vertex: false, gcs: false, stt: false });
+        setApiDown(true);
+      });
     refreshHistory();
     return () => sourceRef.current?.close();
   }, []);
@@ -144,6 +155,11 @@ export default function App() {
             </div>
           </div>
         </div>
+        {apiDown && (
+          <div className="px-3 text-xs text-red-300">
+            API unreachable. Start <span className="tc">uvicorn api.main:app --port 8000</span>
+          </div>
+        )}
         <nav className="flex items-center gap-4 text-xs uppercase tracking-wider text-bay-500">
           <button
             type="button"
@@ -226,7 +242,7 @@ export default function App() {
                     className="cursor-pointer border-t border-bay-800 hover:bg-bay-800/50"
                     onClick={() => openHistory(row.id)}
                   >
-                    <td className="tc px-4 py-3 text-xs">{row.created_at}</td>
+                    <td className="tc px-4 py-3 text-xs">{formatStamp(row.created_at)}</td>
                     <td className="px-4 py-3">{row.profile_id}</td>
                     <td className="tc px-4 py-3 text-xs">{row.status}</td>
                     <td className="px-4 py-3">{row.finding_count}</td>

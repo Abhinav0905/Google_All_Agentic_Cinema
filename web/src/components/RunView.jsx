@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   Download,
@@ -6,7 +6,7 @@ import {
   Play,
   X,
 } from "lucide-react";
-import { msToTimecode, seekSeconds } from "../timecode.js";
+import { msToRange, msToTimecode, seekSeconds } from "../timecode.js";
 import { api } from "../api.js";
 
 const STEPS = [
@@ -46,11 +46,27 @@ function stepRecord(run, id) {
   return (run.steps || []).find((s) => s.step_name === id);
 }
 
-function Scorecard({ scorecard }) {
+function Scorecard({ scorecard, running }) {
+  if (!scorecard && running) {
+    return (
+      <div>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-bay-500">
+          Scorecard
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-24 rounded-xl border border-bay-700">
+              <div className="skel h-full rounded-xl" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
   if (!scorecard) {
     return (
       <div className="rounded-xl border border-bay-700 bg-bay-850 p-6 text-sm text-bay-500">
-        Scorecard appears when the pipeline finishes.
+        No scorecard yet. Start a run or wait for scoring to finish.
       </div>
     );
   }
@@ -99,6 +115,7 @@ function VideoBay({ run, selected, seekRef, videoFile }) {
   const videoRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [now, setNow] = useState(0);
+  const [mediaFailed, setMediaFailed] = useState(false);
   const durationMs = useMemo(() => {
     const last = Math.max(
       60_000,
@@ -122,6 +139,16 @@ function VideoBay({ run, selected, seekRef, videoFile }) {
   };
   if (seekRef) seekRef.current = seekTo;
 
+  useEffect(() => {
+    if (!playing || (videoRef.current && videoRef.current.duration && !mediaFailed)) {
+      return undefined;
+    }
+    const timer = setInterval(() => {
+      setNow((prev) => (prev + 200 > durationMs ? 0 : prev + 200));
+    }, 200);
+    return () => clearInterval(timer);
+  }, [playing, durationMs, mediaFailed]);
+
   const markers = run.findings || [];
 
   return (
@@ -135,9 +162,7 @@ function VideoBay({ run, selected, seekRef, videoFile }) {
             onTimeUpdate={(e) => setNow(e.currentTarget.currentTime * 1000)}
             onPlay={() => setPlaying(true)}
             onPause={() => setPlaying(false)}
-            onError={() => {
-              /* sample clip may be absent; synthetic rail still seeks */
-            }}
+            onError={() => setMediaFailed(true)}
           />
         ) : null}
         <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-4">
@@ -145,6 +170,12 @@ function VideoBay({ run, selected, seekRef, videoFile }) {
           <div className="tc text-3xl font-medium text-white/90 drop-shadow">
             {msToTimecode(now)}
           </div>
+          {(mediaFailed || !objectUrl) && (
+            <div className="max-w-sm text-xs leading-5 text-bay-500">
+              No picture file in this run. Markers still seek the clock.
+              Drop an MP4 on New QC when you have one.
+            </div>
+          )}
         </div>
       </div>
       <div className="border-t border-bay-800 bg-bay-900 px-4 py-3">
@@ -173,10 +204,12 @@ function VideoBay({ run, selected, seekRef, videoFile }) {
             className="inline-flex items-center gap-1 text-bay-300"
             onClick={() => {
               const el = videoRef.current;
-              if (el && el.duration) {
+              if (el && el.duration && !mediaFailed) {
                 if (el.paused) el.play();
                 else el.pause();
+                return;
               }
+              setPlaying((prev) => !prev);
             }}
           >
             {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
@@ -241,9 +274,7 @@ function FindingDrawer({ run, finding, onClose, onSeek, onDecide }) {
               <div className="rounded-md border border-error/20 bg-error/5 p-3">
                 <div className="mb-1 text-[11px] uppercase text-red-300">Before</div>
                 <div className="tc text-[11px] text-bay-500">
-                  {fix.before
-                    ? `${msToTimecode(fix.before.start_ms)} → ${msToTimecode(fix.before.end_ms)}`
-                    : "—"}
+                  {fix.before ? msToRange(fix.before.start_ms, fix.before.end_ms) : "—"}
                 </div>
                 <pre className="mt-2 whitespace-pre-wrap text-xs">
                   {fix.before?.raw_text || fix.before?.lines?.join("\n") || "[insert]"}
@@ -252,9 +283,7 @@ function FindingDrawer({ run, finding, onClose, onSeek, onDecide }) {
               <div className="rounded-md border border-pass/20 bg-pass/5 p-3">
                 <div className="mb-1 text-[11px] uppercase text-emerald-300">After</div>
                 <div className="tc text-[11px] text-bay-500">
-                  {fix.after
-                    ? `${msToTimecode(fix.after.start_ms)} → ${msToTimecode(fix.after.end_ms)}`
-                    : "[delete]"}
+                  {fix.after ? msToRange(fix.after.start_ms, fix.after.end_ms) : "[delete]"}
                 </div>
                 <pre className="mt-2 whitespace-pre-wrap text-xs">
                   {fix.after?.raw_text || fix.after?.lines?.join("\n") || ""}
@@ -279,6 +308,11 @@ function FindingDrawer({ run, finding, onClose, onSeek, onDecide }) {
             </div>
           </div>
         )}
+        {!fix && (
+          <div className="rounded-md border border-bay-700 bg-bay-900 p-3 text-sm text-bay-500">
+            No automatic fix for this finding. It is reported only.
+          </div>
+        )}
       </div>
     </aside>
   );
@@ -288,6 +322,7 @@ export default function RunView({ run, videoFile, onRunChange, onBack }) {
   const [selectedId, setSelectedId] = useState(null);
   const [codeFilter, setCodeFilter] = useState("all");
   const [sevFilter, setSevFilter] = useState("all");
+  const [decideError, setDecideError] = useState("");
   const seekRef = useRef(null);
 
   const selected = (run.findings || []).find((f) => f.id === selectedId) || null;
@@ -307,8 +342,13 @@ export default function RunView({ run, videoFile, onRunChange, onBack }) {
   };
 
   const decide = async (fixId, decision) => {
-    const next = await api.decideFix(run.id, fixId, decision);
-    onRunChange(next);
+    setDecideError("");
+    try {
+      const next = await api.decideFix(run.id, fixId, decision);
+      onRunChange(next);
+    } catch (err) {
+      setDecideError(err.message || "Could not save that decision.");
+    }
   };
 
   return (
@@ -330,7 +370,7 @@ export default function RunView({ run, videoFile, onRunChange, onBack }) {
                     {step.label}
                   </span>
                   <span
-                    className={`tc text-[10px] ${
+                    className={`tc inline-flex items-center gap-1 text-[10px] ${
                       status === "completed"
                         ? "text-pass"
                         : status === "running"
@@ -340,6 +380,7 @@ export default function RunView({ run, videoFile, onRunChange, onBack }) {
                             : "text-bay-500"
                     }`}
                   >
+                    {status === "running" && <span className="pulse-dot" />}
                     {status.toUpperCase()}
                   </span>
                 </div>
@@ -360,7 +401,12 @@ export default function RunView({ run, videoFile, onRunChange, onBack }) {
       <main className="min-w-0 flex-1 overflow-y-auto p-6">
         {run.status === "failed" && (
           <div className="mb-4 rounded-lg border border-error/40 bg-error/10 px-4 py-3 text-sm text-red-200">
-            Pipeline failed. {(run.steps || []).find((s) => s.status === "failed")?.summary}
+            Pipeline failed. {(run.steps || []).find((s) => s.status === "failed")?.summary || "See the failed step in the rail."}
+          </div>
+        )}
+        {decideError && (
+          <div className="mb-4 rounded-lg border border-error/40 bg-error/10 px-4 py-3 text-sm text-red-200">
+            {decideError}
           </div>
         )}
         {run.status === "running" && !run.scorecard && (
@@ -369,7 +415,7 @@ export default function RunView({ run, videoFile, onRunChange, onBack }) {
           </div>
         )}
 
-        <Scorecard scorecard={run.scorecard} />
+        <Scorecard scorecard={run.scorecard} running={run.status === "running"} />
 
         <div className="mt-8">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-bay-500">

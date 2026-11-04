@@ -50,9 +50,9 @@ export default function NewQc({
           Check a cut against the spec
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-bay-500">
-          Drop a caption file, pick a profile, and run the eight-step bay. Video stays
-          in the browser. Captions and AD scripts are the only files the engine reads
-          locally when Cloud Storage is off.
+          First time here? Click <span className="text-bay-300">Load sample</span>.
+          No files, no cloud keys. The seeded captions already contain the defects
+          the demo is meant to find.
         </p>
       </div>
 
@@ -127,7 +127,7 @@ export default function NewQc({
             className="inline-flex items-center gap-2 rounded-md border border-bay-700 bg-bay-800 px-4 py-2 text-sm font-medium hover:border-accent/50 disabled:opacity-50"
           >
             <Sparkles className="h-4 w-4" />
-            Load sample
+            {busy ? "Loading sample…" : "Load sample"}
           </button>
           <button
             type="button"
@@ -136,16 +136,28 @@ export default function NewQc({
             className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-bay-950 hover:bg-indigo-300 disabled:opacity-40"
           >
             <Play className="h-4 w-4" />
-            Run QC
+            {busy ? "Starting…" : "Run QC"}
           </button>
         </div>
       </div>
 
-      <div className="mt-6 flex gap-6 text-xs text-bay-500">
-        <span className="tc">VERTEX {health?.vertex ? "READY" : "OFFLINE"}</span>
-        <span className="tc">GCS {health?.gcs ? "READY" : "LOCAL MODE"}</span>
-        <span className="tc">STT {health?.stt ? "ON" : "OFF"}</span>
+      <div className="mt-6 flex flex-wrap gap-6 text-xs text-bay-500">
+        {health == null ? (
+          <span className="tc">CHECKING SERVICES…</span>
+        ) : (
+          <>
+            <span className="tc">VERTEX {health.vertex ? "READY" : "OFFLINE"}</span>
+            <span className="tc">GCS {health.gcs ? "READY" : "LOCAL MODE"}</span>
+            <span className="tc">STT {health.stt ? "ON" : "OFF"}</span>
+          </>
+        )}
       </div>
+      {health && !health.gcs && (
+        <p className="mt-3 text-xs text-bay-500">
+          Local mode: picture stays in the browser. Caption and AD files are stored
+          on this machine only. Vertex is optional for the sample.
+        </p>
+      )}
     </div>
   );
 }

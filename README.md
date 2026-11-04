@@ -1,87 +1,64 @@
 # CueCheck
 
-> Accessibility QC agent for film and TV deliverables.
+Accessibility QC for captions, SDH, and audio description. Upload a cut, pick a spec profile, get a scored report with timestamps, accept fixes, export compliant files.
 
-CueCheck checks caption/SDH files and audio-description (AD) scripts against spec profiles (FCC standards, streaming timed-text style guides), explains every defect with a millisecond timestamp, fixes deterministic issues, and exports compliant files and audit reports.
+## Run the sample
 
-Built for the **Agentic Cinema Hackathon** (Replit Track).
+Python 3.11+, Node 18+. No cloud account required.
 
----
-
-## Architecture & Layout
-
-```
-cuecheck/
-  engine/            Pure Python: parsing, profiles, rules, alignment, fixer, scoring, export
-  agents/            google-adk agents wrapping engine steps + Gemini calls; SequentialAgent pipeline
-  api/               FastAPI app: runs, SSE trace, decisions, export; serves web/dist
-  web/               React + Vite + Tailwind SPA
-  profiles/          adult.json, kids.json
-  samples/           clip.mp4, captions_bad.srt, ad_script.srt, expected_findings.json
-  tests/             pytest suite; fixtures/ holds recorded Gemini outputs for offline tests
-  docs/              ARCHITECTURE.md, TOOLING.md, DEMO_SCRIPT.md
-  scripts/           smoke_gcp.py, run_sample.py
-  LICENSE            Apache-2.0
-```
-
----
-
-## Google Cloud Services Used
-
-- **Vertex AI (Gemini 2.5 Flash / Pro)**: Multimodal video transcription, audio event listening, and visual pass (speaker visibility and onscreen text detection). Used in `agents/` and `scripts/smoke_gcp.py`.
-- **Cloud Storage (GCS)**: Secure video and asset storage via signed URLs. Used in `api/` and `scripts/smoke_gcp.py`.
-- **Cloud Speech-to-Text v2** *(optional)*: Precise word timing when enabled.
-
----
-
-## Getting Started
-
-### 1. Setup Virtual Environment
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+cd web && npm install && npm run build && cd ..
+uvicorn api.main:app --port 8000
 ```
 
-### 2. Configure Environment
-Copy `.env.example` to `.env` and fill in your GCP project and bucket details:
+Open http://localhost:8000 and click **Load sample**.
+
+That run uses `samples/captions_bad.srt` and recorded Gemini fixtures. Click a timecode to seek. Accept or reject a fix. Export SRT, VTT, JSON, or the HTML report.
+
+CLI equivalent:
+
+```bash
+python scripts/run_sample.py
+```
+
+`adk web .` loads `agents/agent.py` (`root_agent`). Send any message to run the same sample pipeline.
+
+## Optional: Vertex and Cloud Storage
+
+Copy `.env.example` to `.env` only if you want live Gemini or signed video uploads.
+
 ```bash
 cp .env.example .env
-```
-
-### 3. Verify GCP Connectivity
-Run the smoke test script:
-```bash
 python scripts/smoke_gcp.py
 ```
 
-### 4. Run Tests
+Video never passes through the app server. The browser PUTs the picture to GCS. Vertex reads the `gs://` URI.
+
+## Tests
+
 ```bash
 pytest
 ruff check .
 ```
 
-### 5. Run the QC bay locally
-```bash
-# terminal 1
-uvicorn api.main:app --reload --port 8000
+## What lives where
 
-# terminal 2
-cd web
-npm install
-npm run dev
-```
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the mermaid diagrams.
 
-Open http://localhost:5173 and click **Load sample**. No uploads required. Click a finding to seek the timeline, accept or reject fixes, then export SRT / VTT / JSON / HTML.
+| Path | Role |
+|---|---|
+| `engine/` | Pure Python: parse, rules, align, fix, score, export |
+| `agents/` | ADK SequentialAgent + Gemini (Vertex) |
+| `api/` | FastAPI, SSE, signed URLs |
+| `web/` | React QC bay |
+| `profiles/` | Adult broadcast / Children's thresholds |
+| `samples/` | Seeded defective captions + AD script |
 
-To serve the built SPA from FastAPI:
-```bash
-cd web && npm run build
-uvicorn api.main:app --port 8000
-```
-
----
+Google Cloud used at runtime: Vertex AI Gemini (`agents/multimodal.py`, `scripts/smoke_gcp.py`), Cloud Storage signed URLs (`engine/gcs.py`, `api/main.py`). Speech-to-Text v2 is optional and off by default.
 
 ## License
 
-Licensed under the [Apache-2.0 License](LICENSE).
+Apache-2.0. See [LICENSE](LICENSE).
