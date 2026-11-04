@@ -61,6 +61,25 @@ pytest
 ruff check .
 ```
 
+### 5. Run the QC bay locally
+```bash
+# terminal 1
+uvicorn api.main:app --reload --port 8000
+
+# terminal 2
+cd web
+npm install
+npm run dev
+```
+
+Open http://localhost:5173 and click **Load sample**. No uploads required. Click a finding to seek the timeline, accept or reject fixes, then export SRT / VTT / JSON / HTML.
+
+To serve the built SPA from FastAPI:
+```bash
+cd web && npm run build
+uvicorn api.main:app --port 8000
+```
+
 ---
 
 ## License

@@ -46,6 +46,7 @@ web/node_modules/
 
 # Generated reports
 samples/report.html
+.data/
 
 # OS specific
 .DS_Store

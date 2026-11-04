@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  min-height: 100%;
+  background: #090b10;
+}
+
+body {
+  margin: 0;
+}
+
+.tc {
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.seek-link {
+  cursor: pointer;
+  border-bottom: 1px dotted rgba(129, 140, 248, 0.5);
+}
+
+.seek-link:hover {
+  color: #c7d2fe;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a3142;
+  border-radius: 99px;
+}
