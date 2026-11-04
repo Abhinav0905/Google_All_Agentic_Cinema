@@ -1,0 +1,16 @@
+{
+  "events": [
+    {
+      "t_ms": 18500,
+      "label": "[PHONE RINGS]",
+      "salience": "plot",
+      "source": "gemini"
+    },
+    {
+      "t_ms": 56000,
+      "label": "[DOOR SLAMS]",
+      "salience": "plot",
+      "source": "gemini"
+    }
+  ]
+}

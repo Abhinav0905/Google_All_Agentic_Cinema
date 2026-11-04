@@ -1,0 +1,11 @@
+1
+00:00:00,500 --> 00:00:01,800
+The meeting room is brightly lit as team members take their seats.
+
+2
+00:00:05,200 --> 00:00:06,800
+Charts and presentation slides appear on the main projector screen.
+
+3
+00:00:30,000 --> 00:00:30,800
+A slide transition displays the infrastructure metric dashboard.

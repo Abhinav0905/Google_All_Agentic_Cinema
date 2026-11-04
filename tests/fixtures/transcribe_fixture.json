@@ -1,0 +1,95 @@
+{
+  "segments": [
+    {
+      "start_ms": 2000,
+      "end_ms": 5000,
+      "text": "Welcome to the team briefing. We have much to cover.",
+      "speaker_label": "Alex",
+      "confidence": 0.98
+    },
+    {
+      "start_ms": 6000,
+      "end_ms": 7500,
+      "text": "The quarterly numbers are out and everyone needs to see them immediately.",
+      "speaker_label": "Alex",
+      "confidence": 0.97
+    },
+    {
+      "start_ms": 8500,
+      "end_ms": 12000,
+      "text": "As you can see on the screen, revenue exceeded our projections.",
+      "speaker_label": "Alex",
+      "confidence": 0.99
+    },
+    {
+      "start_ms": 13000,
+      "end_ms": 14200,
+      "text": "Please examine section four of the document.",
+      "speaker_label": "Alex",
+      "confidence": 0.96
+    },
+    {
+      "start_ms": 15000,
+      "end_ms": 19500,
+      "text": "We have broken down the statistics into three clear categories for your convenience.",
+      "speaker_label": "Alex",
+      "confidence": 0.98
+    },
+    {
+      "start_ms": 20500,
+      "end_ms": 24000,
+      "text": "Customer acquisition grew rapidly across all digital channels.",
+      "speaker_label": "Alex",
+      "confidence": 0.99
+    },
+    {
+      "start_ms": 25000,
+      "end_ms": 26500,
+      "text": "Retention rates also showed a significant increase this year.",
+      "speaker_label": "Alex",
+      "confidence": 0.97
+    },
+    {
+      "start_ms": 27500,
+      "end_ms": 29500,
+      "text": "Wait, did you check the server logs?",
+      "speaker_label": "Sarah",
+      "confidence": 0.95
+    },
+    {
+      "start_ms": 31000,
+      "end_ms": 34300,
+      "text": "The database migration completed without any recorded errors.",
+      "speaker_label": "Alex",
+      "confidence": 0.98
+    },
+    {
+      "start_ms": 35500,
+      "end_ms": 38900,
+      "text": "Our latency dropped significantly after the infrastructure update.",
+      "speaker_label": "Alex",
+      "confidence": 0.98
+    },
+    {
+      "start_ms": 40000,
+      "end_ms": 43300,
+      "text": "All security audits confirmed full compliance with policies.",
+      "speaker_label": "Alex",
+      "confidence": 0.99
+    },
+    {
+      "start_ms": 44500,
+      "end_ms": 48300,
+      "text": "Let's proceed to the next agenda item and review our launch timeline.",
+      "speaker_label": "Alex",
+      "confidence": 0.97
+    },
+    {
+      "start_ms": 52000,
+      "end_ms": 55000,
+      "text": "We also need to discuss the marketing budget.",
+      "speaker_label": "Alex",
+      "confidence": 0.96
+    }
+  ]
+}
