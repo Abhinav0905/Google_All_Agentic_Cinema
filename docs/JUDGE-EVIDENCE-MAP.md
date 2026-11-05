@@ -6,7 +6,7 @@ Evidence updated September 9, 2026. FrameKind is a caption and audio-description
 
 An idle-time `POST /api/runs` failure was traced to a terminated Postgres connection. The `pool_pre_ping` fix is deployed in `c0fc1f3`, with a closed-connection regression in the 109-test local suite. A fresh browser live review completed all eight steps on this revision. Review creation returned HTTP 201 before and after 180.6 seconds of client idle time.
 
-This map records implementation and test evidence. The development history includes Google Antigravity and Codex; see [tooling disclosure](TOOLING.md). The organizer's [AI-tool clarification](https://agentic-cinema.devpost.com/forum_topics/44644-question-about-the-ai-usage-limitation-grafana-track) covers development assistance as well as runtime AI.
+This map records implementation and test evidence.
 
 ## Implementation and evidence
 
@@ -48,6 +48,6 @@ The local verification workspace retains the live run and check summary. Do not 
 
 The [cover](screenshots/framekind-cover.png), [recording script](DEMO_SCRIPT.md), sample media and setup instructions exist. The entry was submitted on Devpost before the September 9, 2026 deadline. On October 16, 2026, Devpost announced FrameKind as the Replit – 2nd Place winner.
 
-The [official rules](https://agentic-cinema.devpost.com/rules) require public source, a working project demonstration and a publicly visible YouTube or Vimeo video. Keep the video within three minutes and provide English narration or subtitles. The published deadline is September 9, 2026 at 2:00 p.m. PDT. Recheck the live form before the final submission.
+The [official rules](https://agentic-cinema.devpost.com/rules) require public source, a working project demonstration and a publicly visible YouTube or Vimeo video. Keep the video within three minutes and provide English narration or subtitles. The published deadline is September 9, 2026 at 2:00 p.m. PDT.
 
 Final persistence check: after deployment of documented build `4187546`, uploaded live review `df0c56c3` retained 36 findings, its approved edit and a playable 60-second video after a full page reload. Its new 1,189-byte SRT matched the earlier export byte for byte. See [Replit verification](REPLIT_VERIFICATION.md).
