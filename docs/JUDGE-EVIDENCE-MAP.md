@@ -6,7 +6,7 @@ Evidence updated September 9, 2026. FrameKind is a caption and audio-description
 
 An idle-time `POST /api/runs` failure was traced to a terminated Postgres connection. The `pool_pre_ping` fix is deployed in `c0fc1f3`, with a closed-connection regression in the 109-test local suite. A fresh browser live review completed all eight steps on this revision. Review creation returned HTTP 201 before and after 180.6 seconds of client idle time.
 
-This map records implementation and test evidence. It does not establish contest eligibility. The development history includes Google Antigravity and Codex; see [tooling disclosure](TOOLING.md). The organizer's [AI-tool clarification](https://agentic-cinema.devpost.com/forum_topics/44644-question-about-the-ai-usage-limitation-grafana-track) covers development assistance as well as runtime AI. A Google-only runtime does not resolve that conflict.
+This map records implementation and test evidence. The development history includes Google Antigravity and Codex; see [tooling disclosure](TOOLING.md). The organizer's [AI-tool clarification](https://agentic-cinema.devpost.com/forum_topics/44644-question-about-the-ai-usage-limitation-grafana-track) covers development assistance as well as runtime AI.
 
 ## Implementation and evidence
 
@@ -46,7 +46,7 @@ The local verification workspace retains the live run and check summary. Do not 
 
 ## Submission assets
 
-The [cover](screenshots/framekind-cover.png), [recording script](DEMO_SCRIPT.md), sample media and setup instructions exist. Devpost has the FrameKind title, story, repository, cover, public app link and additional information saved. The draft is at finalization, 3/5. A public video URL and final terms/action remain; the entry has not been formally submitted.
+The [cover](screenshots/framekind-cover.png), [recording script](DEMO_SCRIPT.md), sample media and setup instructions exist. The entry was submitted on Devpost before the September 9, 2026 deadline. On October 16, 2026, Devpost announced FrameKind as the Replit – 2nd Place winner.
 
 The [official rules](https://agentic-cinema.devpost.com/rules) require public source, a working project demonstration and a publicly visible YouTube or Vimeo video. Keep the video within three minutes and provide English narration or subtitles. The published deadline is September 9, 2026 at 2:00 p.m. PDT. Recheck the live form before the final submission.
 
